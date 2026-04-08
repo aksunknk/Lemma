@@ -1,0 +1,54 @@
+# --- Lemma: 秘密・環境 ---
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# --- Backend (Python) ---
+backend/venv/
+backend/.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# SQLite（ローカル生成・書籍データ想定）
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 実行時ログ・一時URL（リポジトリに含めない）
+*.log
+*.txt
+!README.md
+tunnel_log.txt
+current_url.txt
+
+# --- Frontend (Vite / React / Node) ---
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+
+# --- ツール・キャッシュ ---
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Playwright / ブラウザ成果物（プロジェクト直下に出す場合）
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
