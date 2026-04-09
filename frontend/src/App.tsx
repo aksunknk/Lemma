@@ -33,7 +33,7 @@ function App() {
       // 意図的な遅延 — 「抽出」の演出
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      const res = await fetch('http://localhost:8000/api/search', {
+      const res = await fetch('https://api.node4d.xyz/api/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
