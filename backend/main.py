@@ -9,9 +9,18 @@ import datetime
 
 app = FastAPI(title="lemma API", description="4D Vector Book Search Engine")
 
+origins = [
+    "https://node4d.xyz",
+    "https://api.node4d.xyz",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+]
+
 app.add_middleware(
     CORSMiddleware,
-allow_origins=["https://node4d.xyz", "https://api.node4d.xyz", "http://localhost:5173", "http://localhost:5174", "http://localhost:5175"],    allow_credentials=True,
+    allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

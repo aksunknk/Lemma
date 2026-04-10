@@ -55,8 +55,8 @@ def start_system():
     print("Starting Cloudflare Quick Tunnel...")
     with open(os.path.join(BASE_DIR, "tunnel.log"), "w") as f_tunnel:
         tunnel_proc = subprocess.Popen(
-            [CLOUDFLARED_EXE, "tunnel", "--url", "http://localhost:8000"],
-            stdout=subprocess.PIPE, # URL抽出のためPIPE
+            [CLOUDFLARED_EXE, "tunnel", "run", "lemma-tunnel"],
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             encoding='utf-8',
