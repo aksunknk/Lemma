@@ -1,11 +1,32 @@
+import os
+import zipfile
+import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 import uvicorn
+
+# --- 1. 巨大DBの自己調達と解凍ロジック ---
+ZIP_FILE = "lemma_dbs.zip"
+CHECK_FILE = "lemma_master.db"
+DB_URL = "https://github.com/aksunknk/Lemma/releases/download/v1.0-data/lemma_dbs.zip"
+
+if not os.path.exists(CHECK_FILE):
+    print(f"Downloading databases from GitHub Releases...")
+    os.system(f"curl -L -s -o {ZIP_FILE} {DB_URL}")
+    
+    if os.path.exists(ZIP_FILE):
+        print("Download complete. Extracting...")
+        with zipfile.ZipFile(ZIP_FILE, 'r') as zip_ref:
+            zip_ref.extractall(".")
+        print("Extraction complete. Purging redundant ZIP file...")
+        os.remove(ZIP_FILE)
+        
+# --- 2. 独自モジュールのインポート ---
 from vector_search import LemmaSearchEngine
 from nlp_processor import QueryVectorizer
-import datetime
+
 
 app = FastAPI(title="lemma API", description="4D Vector Book Search Engine")
 
