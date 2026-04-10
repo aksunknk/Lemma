@@ -42,7 +42,7 @@ function App() {
       });
 
       if (res.status === 404) {
-        setBook(null);
+        setBook({ status: 404 });
         setError(null);
         return;
       }
@@ -75,7 +75,7 @@ function App() {
       <div className="w-full md:w-[45%] lg:w-[35%] flex flex-col border-b md:border-b-0 md:border-r border-gray-900 justify-between p-8 md:p-14 lg:p-16 relative z-10 bg-brand-950/90 backdrop-blur-sm shadow-2xl overflow-y-auto md:max-h-screen">
         <div className="mb-10">
           <h2 className="text-[9px] tracking-[0.5em] text-gray-500 uppercase leading-loose">
-            Singular Book<br/>Extraction Engine
+            Lemma Singular Book<br/>Extraction Engine
           </h2>
           <div className="w-6 h-[1px] bg-gray-700 mt-6"></div>
         </div>

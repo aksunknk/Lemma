@@ -27,7 +27,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ book, loading, err
   if (error) {
     return (
       <div className="h-full flex items-center justify-center p-8 w-full">
-        <p className="text-gray-400 tracking-[0.2em] text-xs uppercase">{error}</p>
+        <p className="text-gray-400 tracking-[0.4em] text-sm uppercase font-mono">404: NULL SPACE</p>
       </div>
     );
   }
@@ -65,26 +65,16 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ book, loading, err
   // 404: 誠実な沈黙
   if (book.status === 404) {
     return (
-      <div className="h-full flex flex-col justify-center w-full max-w-2xl px-8 animate-[fadeIn_1s_ease-out]">
+      <div className="h-full flex flex-col justify-center items-center w-full max-w-2xl px-8 animate-[fadeIn_1s_ease-out]">
         <style>{`
           @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
           }
         `}</style>
-        <div className="space-y-6 text-center md:text-left">
-          <p className="text-sm uppercase tracking-[0.4em] text-gray-500 font-mono">
-            404 — Not Found
-          </p>
-          <p className="text-gray-400 tracking-[0.2em] text-xs uppercase">
-            {book.message}
-          </p>
-          {dist !== undefined && (
-            <p className="text-gray-600 font-mono text-[10px] tracking-widest uppercase opacity-50">
-              DISTANCE: {dist.toFixed(4)}
-            </p>
-          )}
-        </div>
+        <p className="text-gray-400 tracking-[0.4em] text-sm uppercase font-mono">
+          404: NULL SPACE
+        </p>
       </div>
     );
   }
