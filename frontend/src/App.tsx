@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { InputPanel } from './components/InputPanel';
-import { ResultDisplay } from './components/ResultDisplay';
+import { ResultDisplay, SearchResult } from './components/ResultDisplay';
+
+const API_URL = import.meta.env.VITE_API_URL || 'https://api.node4d.xyz';
+const EXTRACTION_DELAY_MS = 800;
 
 function App() {
-  const [eraMin, setEraMin] = useState<number>(0.0);
-  const [eraMax, setEraMax] = useState<number>(1.0);
-  const [origin, setOrigin] = useState<number>(0.5);
-  const [style, setStyle] = useState<number>(0.5);
-  const [renown, setRenown] = useState<number>(0.5);
-  const [keyword, setKeyword] = useState<string>('');
+  const [eraMin, setEraMin] = useState(0.0);
+  const [eraMax, setEraMax] = useState(1.0);
+  const [origin, setOrigin] = useState(0.5);
+  const [style, setStyle] = useState(0.5);
+  const [renown, setRenown] = useState(0.5);
+  const [keyword, setKeyword] = useState('');
   
-  const [book, setBook] = useState<any | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [book, setBook] = useState<SearchResult | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSearch = async () => {
@@ -19,31 +22,27 @@ function App() {
     setError(null);
     setBook(null);
 
-    // eraMin / eraMax および keyword を含む範囲指定ペイロードを送信
     const payload = { 
       era_min: eraMin, 
       era_max: eraMax, 
       origin, 
       style, 
       renown,
-      keyword: keyword || null
+      keyword: keyword || null,
     };
 
     try {
       // 意図的な遅延 — 「抽出」の演出
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, EXTRACTION_DELAY_MS));
 
-      const res = await fetch('https://api.node4d.xyz/api/search', {
+      const res = await fetch(`${API_URL}/api/search`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
       if (res.status === 404) {
         setBook({ status: 404 });
-        setError(null);
         return;
       }
 
@@ -52,10 +51,10 @@ function App() {
         throw new Error(errorData.detail || 'Network response was not ok');
       }
 
-      const data = await res.json();
-      setBook(data);
-    } catch (err: any) {
-      setError(err.message || 'An error occurred during extraction.');
+      setBook(await res.json());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'An error occurred during extraction.';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -104,7 +103,6 @@ function App() {
           book={book} 
           loading={loading} 
           error={error} 
-          userInputs={{ eraMin, eraMax, origin, style, renown }}
         />
       </div>
     </div>

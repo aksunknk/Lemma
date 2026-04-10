@@ -1,26 +1,20 @@
-interface SearchResult {
+export interface SearchResult {
   status: number;
+  item_id?: string;
   title?: string;
   author?: string;
+  source?: string;
+  category?: string;
   message?: string;
   distance?: number;
   min_distance?: number;
   vector?: number[];
 }
 
-interface UserInputs {
-  eraMin: number;
-  eraMax: number;
-  origin: number;
-  style: number;
-  renown: number;
-}
-
 interface ResultDisplayProps {
   book: SearchResult | null;
   loading: boolean;
   error: string | null;
-  userInputs?: UserInputs;
 }
 
 export const ResultDisplay: React.FC<ResultDisplayProps> = ({ book, loading, error }) => {
@@ -36,16 +30,8 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ book, loading, err
     return (
       <div className="h-full flex items-center justify-center w-full">
         <div className="w-24 h-[1px] bg-gray-800 overflow-hidden relative">
-          <div className="absolute top-0 left-0 h-full bg-white w-full animate-[loadingLine_1.5s_ease-in-out_infinite] scale-x-0 origin-left"></div>
+          <div className="absolute top-0 left-0 h-full bg-white w-full animate-loading-line scale-x-0 origin-left"></div>
         </div>
-        <style>{`
-          @keyframes loadingLine {
-            0% { transform: scaleX(0); transform-origin: left; }
-            50% { transform: scaleX(1); transform-origin: left; }
-            50.1% { transform: scaleX(1); transform-origin: right; }
-            100% { transform: scaleX(0); transform-origin: right; }
-          }
-        `}</style>
       </div>
     );
   }
@@ -65,13 +51,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ book, loading, err
   // 404: 誠実な沈黙
   if (book.status === 404) {
     return (
-      <div className="h-full flex flex-col justify-center items-center w-full max-w-2xl px-8 animate-[fadeIn_1s_ease-out]">
-        <style>{`
-          @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-        `}</style>
+      <div className="h-full flex flex-col justify-center items-center w-full max-w-2xl px-8 animate-fade-in">
         <p className="text-gray-400 tracking-[0.4em] text-sm uppercase font-mono">
           404: NULL SPACE
         </p>
@@ -81,14 +61,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ book, loading, err
 
   // 200: 抽出成功
   return (
-    <div className="h-full flex flex-col justify-center w-full max-w-2xl px-8 animate-[fadeIn_1s_ease-out]">
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-
+    <div className="h-full flex flex-col justify-center w-full max-w-2xl px-8 animate-fade-in">
       <div className="space-y-8 text-center md:text-left">
         <div className="flex flex-col gap-4 min-w-0">
           <p className="font-mono text-gray-500 tracking-[0.4em] text-xs uppercase mb-2">

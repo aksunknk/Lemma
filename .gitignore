@@ -1,12 +1,11 @@
-# --- Lemma: 秘密・環境 ---
+# === Lemma Project .gitignore ===
+
+# --- 環境・秘密 ---
 .env
 .env.*
 !.env.example
-!.env.*.example
 
-# --- Backend (Python) ---
-backend/venv/
-backend/.venv/
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
@@ -17,27 +16,92 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+backend/venv/
+backend/.venv/
 
-# SQLite（ローカル生成・書籍データ想定）
+# --- データベース ---
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
+*.sqlite
 
-# 実行時ログ・一時URL（リポジトリに含めない）
+# --- バイナリ・アーカイブ ---
+*.exe
+*.zip
+*.tar.gz
+
+# --- データファイル ---
+*.csv
+*.json
+!backend/literary_vocab.json
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/tsconfig.json
+!frontend/tsconfig.node.json
+*.png
+*.jpg
+*.jpeg
+
+# --- 大容量 JSON データ ---
+raw_books_*.json
+
+# --- ログ・一時ファイル ---
 *.log
 *.txt
-!README.md
-tunnel_log.txt
-current_url.txt
+!requirements.txt
 
-# --- Frontend (Vite / React / Node) ---
+# --- レガシースクリプト（ルート直下） ---
+# データ投入・デバッグ用の一度きりスクリプト
+augment_*.py
+check_*.py
+debug_*.py
+fix_*.py
+get_*.py
+insert_*.py
+inspect_*.py
+pack_*.py
+purge_*.py
+repair_*.py
+test_mimi_*.py
+*.walkthrough
+*.task
+
+# --- レガシースクリプト（backend/） ---
+backend/scripts/
+backend/services/
+backend/fetch_*.py
+backend/monitor_*.py
+backend/bulk_*.py
+backend/clean_*.py
+backend/cleanse_*.py
+backend/data_*.py
+backend/debug_*.py
+backend/finalize_*.py
+backend/fix_*.py
+backend/heuristic_*.py
+backend/ingest_*.py
+backend/merge_*.py
+backend/profile_*.py
+backend/semantic_*.py
+backend/start_*.py
+backend/status_*.py
+backend/visualize_*.py
+backend/audit_*.py
+backend/test_*.py
+backend/verify_*.py
+backend/database.py
+backend/models.py
+backend/get-pip.py
+
+# --- Frontend ---
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
 frontend/.vite/
+frontend/.wrangler/
 
-# --- ツール・キャッシュ ---
+# --- ツール・エディタ ---
 .DS_Store
 Thumbs.db
 *.swp
@@ -47,7 +111,7 @@ Thumbs.db
 !.vscode/extensions.json
 !.vscode/settings.json
 
-# Playwright / ブラウザ成果物（プロジェクト直下に出す場合）
+# --- テスト成果物 ---
 test-results/
 playwright-report/
 blob-report/
