@@ -3,6 +3,7 @@ Lemma API — 4D Vector Book Search Engine
 物理PC上の .db ファイル群を直接展開し、120万件の書籍空間から
 最近傍ベクトルを抽出するFastAPIサーバー。
 """
+
 import datetime
 import logging
 
@@ -22,8 +23,13 @@ logger = logging.getLogger("lemma")
 EASTER_EGG_THRESHOLD = 0.99
 NLP_ERA_MARGIN = 0.1
 FUTURE_MAGAZINES = {
-    0: "週刊少年ジャンプ", 1: "週刊プレイボーイ", 2: "週刊少年マガジン",
-    3: "週刊ヤングジャンプ", 4: "フライデー", 5: "週刊現代", 6: "週刊ポスト",
+    0: "週刊少年ジャンプ",
+    1: "週刊プレイボーイ",
+    2: "週刊少年マガジン",
+    3: "週刊ヤングジャンプ",
+    4: "フライデー",
+    5: "週刊現代",
+    6: "週刊ポスト",
 }
 
 # --- CORS 許可オリジン ---
@@ -94,8 +100,12 @@ async def search_book(req: SearchPayload):
                 keyword = extracted_keyword
 
         # イースターエッグ: 2030年モード
-        if keyword == "2030" or (era_min >= EASTER_EGG_THRESHOLD and era_max >= EASTER_EGG_THRESHOLD):
-            title = FUTURE_MAGAZINES.get(datetime.datetime.now().weekday(), "謎の未来週刊誌")
+        if keyword == "2030" or (
+            era_min >= EASTER_EGG_THRESHOLD and era_max >= EASTER_EGG_THRESHOLD
+        ):
+            title = FUTURE_MAGAZINES.get(
+                datetime.datetime.now().weekday(), "謎の未来週刊誌"
+            )
             return {
                 "status": 200,
                 "item_id": "FUTURE-ISSUE",

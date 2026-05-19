@@ -3,6 +3,7 @@ Lemma Search Engine — 4D Vector Space Nearest-Neighbor Search
 複数のSQLiteデータベースを仮想統合空間として結合し、
 4次元ベクトル (ERA, ORIGIN, STYLE, RENOWN) による最近傍探索を行う。
 """
+
 import sqlite3
 import random
 import os
@@ -45,7 +46,9 @@ class LemmaSearchEngine:
             if os.path.exists(self.manga_db_path):
                 cursor.execute("ATTACH DATABASE ? AS manga_db", (self.manga_db_path,))
             if os.path.exists(self.new_books_db_path):
-                cursor.execute("ATTACH DATABASE ? AS new_books", (self.new_books_db_path,))
+                cursor.execute(
+                    "ATTACH DATABASE ? AS new_books", (self.new_books_db_path,)
+                )
 
             # 仮想統合空間の構築（UNION ALL）
             queries = [
@@ -100,8 +103,12 @@ class LemmaSearchEngine:
         if keyword:
             keyword_lower = keyword.lower()
             mask = mask & (
-                self.df["title"].str.lower().str.contains(keyword_lower, na=False, regex=False)
-                | self.df["author"].str.lower().str.contains(keyword_lower, na=False, regex=False)
+                self.df["title"]
+                .str.lower()
+                .str.contains(keyword_lower, na=False, regex=False)
+                | self.df["author"]
+                .str.lower()
+                .str.contains(keyword_lower, na=False, regex=False)
             )
 
         filtered_df = self.df[mask]
@@ -121,7 +128,9 @@ class LemmaSearchEngine:
         sorted_indices = np.argsort(distances)
 
         # 閾値内の Top-K 候補
-        candidates = [idx for idx in sorted_indices[:DEFAULT_TOP_K] if distances[idx] <= threshold]
+        candidates = [
+            idx for idx in sorted_indices[:DEFAULT_TOP_K] if distances[idx] <= threshold
+        ]
 
         if not candidates:
             min_dist = float(distances[sorted_indices[0]])
@@ -151,16 +160,3 @@ class LemmaSearchEngine:
                 float(best_item["renown"]),
             ],
         }
-
-
-if __name__ == "__main__":
-    import sys
-    import json
-
-    sys.stdout.reconfigure(encoding="utf-8")
-    search_engine = LemmaSearchEngine()
-    print(f"=== Unified Search Engine Core Test (Total Records: {len(search_engine.df)}) ===")
-
-    test_vec = [0.8, 0.0, 0.5, 0.8]
-    print(f"\nTarget Vector {test_vec} ->")
-    print(json.dumps(search_engine.search_closest_book(test_vec), indent=2, ensure_ascii=False))
