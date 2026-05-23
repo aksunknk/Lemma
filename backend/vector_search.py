@@ -1,162 +1,108 @@
 """
-Lemma Search Engine — 4D Vector Space Nearest-Neighbor Search
-複数のSQLiteデータベースを仮想統合空間として結合し、
-4次元ベクトル (ERA, ORIGIN, STYLE, RENOWN) による最近傍探索を行う。
+Lemma Search Engine — Stateless Hybrid Vector Search
+sqlite-vecによる384次元ベクトル検索とメタデータフィルタリングを併用し、
+メモリを消費しない完全ステートレスな最近傍探索を行う。
 """
-
 import sqlite3
 import random
-import os
 import logging
-
-import numpy as np
-import pandas as pd
+import sqlite_vec
+from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger("lemma.engine")
 
-# --- 定数 ---
-VECTOR_DIMENSIONS = 4
-VECTOR_COLUMNS = ["era", "origin", "style", "renown"]
 DEFAULT_TOP_K = 5
-DEFAULT_THRESHOLD = 0.3
 ORIGIN_DOMESTIC_CEILING = 0.1
 ORIGIN_FOREIGN_FLOOR = 0.9
 
-
 class LemmaSearchEngine:
-    """120万件の書籍レコードをメモリ上に展開し、ベクトル空間探索を行うエンジン。"""
-
-    def __init__(
-        self,
-        db_path: str = "lemma_master.db",
-        manga_db_path: str = "lemma_manga.db",
-        new_books_db_path: str = "lemma_new_books.db",
-    ):
+    """メモリにデータを保持せず、オンデマンドでSQLite空間を探索するエンジン。"""
+    def __init__(self, db_path: str = "lemma_master.db"):
         self.db_path = db_path
-        self.manga_db_path = manga_db_path
-        self.new_books_db_path = new_books_db_path
-        self._load_data()
+        logger.info("Initializing SentenceTransformer (e5-small)...")
+        # 起動時に軽量モデルのみをメモリに展開（データ自体は保持しない）
+        self.model = SentenceTransformer('intfloat/multilingual-e5-small')
+        logger.info("Stateless Search Engine initialized.")
 
-    def _load_data(self) -> None:
-        """全DBを統合し、ベクトル行列としてメモリに展開する。"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-
-            # 各種DBをアタッチして単一クエリ空間化
-            if os.path.exists(self.manga_db_path):
-                cursor.execute("ATTACH DATABASE ? AS manga_db", (self.manga_db_path,))
-            if os.path.exists(self.new_books_db_path):
-                cursor.execute(
-                    "ATTACH DATABASE ? AS new_books", (self.new_books_db_path,)
-                )
-
-            # 仮想統合空間の構築（UNION ALL）
-            queries = [
-                """SELECT isbn as item_id, title, author, publisher as source,
-                          era, origin, style, renown, 'book' as category FROM books"""
-            ]
-            if os.path.exists(self.manga_db_path):
-                queries.append(
-                    """SELECT CAST(id AS TEXT) as item_id, title, author, source,
-                              era, origin, style, renown, 'manga' as category FROM manga_db.manga"""
-                )
-            if os.path.exists(self.new_books_db_path):
-                queries.append(
-                    """SELECT isbn as item_id, title, author, publisher as source,
-                              era, origin, style, renown, category FROM new_books.books"""
-                )
-
-            unified_query = " UNION ALL ".join(queries)
-            self.df = pd.read_sql_query(unified_query, conn)
-
-        # NaN パージ（ベクトル成分が欠落しているレコードを排除）
-        self.df = self.df.dropna(subset=VECTOR_COLUMNS)
-
-        # ベクトル行列の生成
-        self.vectors = self.df[VECTOR_COLUMNS].values
-
-        logger.info("Loaded %d records into vector space.", len(self.df))
+    def _get_connection(self) -> sqlite3.Connection:
+        """リクエストのたびに軽量な接続を生成し、sqlite-vecをロードする"""
+        conn = sqlite3.connect(self.db_path)
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        return conn
 
     def search_closest_book(
         self,
-        target_vector: list[float],
-        threshold: float = DEFAULT_THRESHOLD,
+        query_text: str = None,
         era_min: float = 0.0,
         era_max: float = 1.0,
+        target_origin: float = 0.5,
         keyword: str | None = None,
     ) -> dict:
-        """ターゲットベクトルに最も近い書籍を抽出する。"""
-        if len(target_vector) != VECTOR_DIMENSIONS:
-            raise ValueError(f"Vector must be exactly {VECTOR_DIMENSIONS} dimensions.")
+        """ターゲットテキストの384DベクトルとSQLフィルタを用いて書籍を抽出する。"""
+        # クエリテキストが存在しない場合（スライダーのみの操作時）のフォールバック
+        search_text = query_text if query_text else "おすすめの面白い本"
+        query_vec = self.model.encode([search_text])[0]
 
-        # 事前フィルタリング (年代範囲による足切り)
-        mask = (self.df["era"] >= era_min) & (self.df["era"] <= era_max)
+        with self._get_connection() as conn:
+            params = [sqlite_vec.serialize_float32(query_vec), era_min, era_max]
+            
+            # ORIGIN（属性）の絶対防壁化
+            origin_condition = ""
+            if target_origin <= ORIGIN_DOMESTIC_CEILING:
+                origin_condition = "AND b.origin < 0.5"
+            elif target_origin >= ORIGIN_FOREIGN_FLOOR:
+                origin_condition = "AND b.origin >= 0.5"
 
-        # ORIGIN（属性）の絶対防壁化
-        target_origin = target_vector[1]
-        if target_origin <= ORIGIN_DOMESTIC_CEILING:
-            mask = mask & (self.df["origin"] < 0.5)
-        elif target_origin >= ORIGIN_FOREIGN_FLOOR:
-            mask = mask & (self.df["origin"] >= 0.5)
+            # キーワードによる絞り込み
+            keyword_condition = ""
+            if keyword:
+                keyword_condition = "AND (b.title LIKE ? OR b.author LIKE ?)"
+                like_kw = f"%{keyword}%"
+                params.extend([like_kw, like_kw])
 
-        # キーワードによる絞り込み
-        if keyword:
-            keyword_lower = keyword.lower()
-            mask = mask & (
-                self.df["title"]
-                .str.lower()
-                .str.contains(keyword_lower, na=False, regex=False)
-                | self.df["author"]
-                .str.lower()
-                .str.contains(keyword_lower, na=False, regex=False)
-            )
+            # ハイブリッド検索クエリ (KNN検索結果をサブクエリで取得し、JOINでフィルタリング)
+            sql = f"""
+            SELECT b.rowid, b.title, b.author, b.publisher, 'book' as category, 
+                   b.era, b.origin, b.style, b.renown, v.distance
+            FROM (
+                SELECT id, distance FROM vec_books
+                WHERE embedding MATCH ? AND k = 250
+            ) v
+            JOIN books b ON v.id = b.rowid
+            WHERE b.era BETWEEN ? AND ?
+              {origin_condition}
+              {keyword_condition}
+            ORDER BY v.distance
+            LIMIT {DEFAULT_TOP_K}
+            """
 
-        filtered_df = self.df[mask]
+            cursor = conn.execute(sql, params)
+            rows = cursor.fetchall()
 
-        if filtered_df.empty:
+            if not rows:
+                return {
+                    "status": 404,
+                    "message": "「誠実な沈黙」: 指定された条件に該当する作品がこの空間には存在しません。",
+                    "min_distance": None,
+                }
+
+            # 候補からランダム抽出 (ゆらぎ)
+            best_item = random.choice(rows)
+            
             return {
-                "status": 404,
-                "message": "「誠実な沈黙」: 指定された条件に該当する作品がこの空間には存在しません。",
-                "min_distance": None,
+                "status": 200,
+                "item_id": str(best_item[0]),
+                "title": str(best_item[1] if best_item[1] else "不明"),
+                "author": str(best_item[2] if best_item[2] else "不明"),
+                "source": str(best_item[3] if best_item[3] else "不明"),
+                "category": str(best_item[4]),
+                "distance": round(best_item[9], 4),
+                "vector": [
+                    float(best_item[5] if best_item[5] is not None else 0.5),
+                    float(best_item[6] if best_item[6] is not None else 0.5),
+                    float(best_item[7] if best_item[7] is not None else 0.5),
+                    float(best_item[8] if best_item[8] is not None else 0.5),
+                ],
             }
-
-        # ユークリッド距離の計算
-        filtered_vectors = filtered_df[VECTOR_COLUMNS].values
-        target = np.array(target_vector)
-        distances = np.linalg.norm(filtered_vectors - target, axis=1)
-
-        sorted_indices = np.argsort(distances)
-
-        # 閾値内の Top-K 候補
-        candidates = [
-            idx for idx in sorted_indices[:DEFAULT_TOP_K] if distances[idx] <= threshold
-        ]
-
-        if not candidates:
-            min_dist = float(distances[sorted_indices[0]])
-            return {
-                "status": 404,
-                "message": f"誠実な沈黙: 条件に合致する作品が存在しません。(最小距離: {round(min_dist, 4)})",
-                "min_distance": round(min_dist, 4),
-            }
-
-        # 候補からランダム抽出 (ゆらぎ)
-        picked_idx = int(random.choice(candidates))
-        picked_dist = float(distances[picked_idx])
-        best_item = filtered_df.iloc[picked_idx]
-
-        return {
-            "status": 200,
-            "item_id": str(best_item["item_id"]),
-            "title": str(best_item["title"]),
-            "author": str(best_item["author"]),
-            "source": str(best_item["source"]),
-            "category": str(best_item["category"]),
-            "distance": round(picked_dist, 4),
-            "vector": [
-                float(best_item["era"]),
-                float(best_item["origin"]),
-                float(best_item["style"]),
-                float(best_item["renown"]),
-            ],
-        }
