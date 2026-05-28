@@ -1,6 +1,8 @@
 import { useState, useEffect, KeyboardEvent } from 'react';
 
 interface InputPanelProps {
+  query: string;
+  setQuery: (val: string) => void;
   eraMin: number;
   setEraMin: (val: number) => void;
   eraMax: number;
@@ -11,19 +13,17 @@ interface InputPanelProps {
   setStyle: (val: number) => void;
   renown: number;
   setRenown: (val: number) => void;
-  keyword: string;
-  setKeyword: (val: string) => void;
   onSubmit: () => void;
   isLoading: boolean;
 }
 
 export const InputPanel = ({
+  query, setQuery,
   eraMin, setEraMin,
   eraMax, setEraMax,
   origin, setOrigin,
   style, setStyle,
   renown, setRenown,
-  keyword, setKeyword,
   onSubmit,
   isLoading
 }: InputPanelProps) => {
@@ -89,17 +89,17 @@ export const InputPanel = ({
     <div className="flex flex-col space-y-10 w-full max-w-sm">
       <div className="space-y-10">
         
-        {/* THEME Input */}
-        <div className="group" id="theme-section">
+        {/* QUERY Textarea */}
+        <div className="group" id="query-section">
           <label className="block text-sm uppercase tracking-widest text-gray-400 mb-4 transition-colors group-hover:text-gray-300">
-            Theme / テーマ
+            Query / 概念・キーワード
           </label>
-          <input
-            type="text"
-            value={keyword}
-            onChange={e => setKeyword(e.target.value)}
-            placeholder="例：孤独、戦争、猫"
-            className="w-full bg-transparent border-b border-gray-800 py-2 outline-none text-gray-100 placeholder-gray-700 focus:border-gray-500 transition-all tracking-wider"
+          <textarea
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="探索したい概念、あらすじ、またはキーワードを自由に入力..."
+            rows={3}
+            className="w-full bg-transparent border border-gray-800 rounded-sm p-3 outline-none text-gray-100 placeholder-gray-700 focus:border-gray-500 transition-all tracking-wider resize-none text-sm font-sans"
           />
         </div>
 
