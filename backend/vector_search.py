@@ -14,6 +14,7 @@ from sentence_transformers import SentenceTransformer
 logger = logging.getLogger("lemma.engine")
 
 DEFAULT_TOP_K = 5
+KNN_CANDIDATES = 1000
 ORIGIN_DOMESTIC_CEILING = 0.1
 ORIGIN_FOREIGN_FLOOR = 0.9
 
@@ -107,7 +108,7 @@ class LemmaSearchEngine:
                b.era, b.origin, b.style, b.renown, v.distance
         FROM (
             SELECT id, distance FROM {vec_table}
-            WHERE embedding MATCH ? AND k = 250
+            WHERE embedding MATCH ? AND k = {KNN_CANDIDATES}
         ) v
         JOIN {table} b ON v.id = b.rowid
         WHERE b.era BETWEEN ? AND ?
