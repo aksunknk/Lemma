@@ -144,6 +144,68 @@ class LemmaSearchEngine:
             })
         return results
 
+    def _search_single_db_fallback(
+        self,
+        config: dict,
+        era_min: float,
+        era_max: float,
+        target_origin: float,
+        keyword: str,
+    ) -> list[dict]:
+        """KNN結果が空の場合に、直接データベースから部分一致 (LIKE) で候補を検索するフォールバック処理。"""
+        db_path = os.path.join(self.db_dir, config["path"])
+        if not os.path.exists(db_path):
+            return []
+
+        table = config["table"]
+        publisher_col = config["publisher_col"]
+        category = config["category"]
+
+        # ORIGIN（属性）の絶対防壁化
+        origin_condition = ""
+        if target_origin <= ORIGIN_DOMESTIC_CEILING:
+            origin_condition = "AND b.origin < 0.5"
+        elif target_origin >= ORIGIN_FOREIGN_FLOOR:
+            origin_condition = "AND b.origin >= 0.5"
+
+        sql = f"""
+        SELECT b.rowid, b.title, b.author, b.{publisher_col}, '{category}' as category,
+               b.era, b.origin, b.style, b.renown, 1.0 as distance
+        FROM {table} b
+        WHERE b.era BETWEEN ? AND ?
+          {origin_condition}
+          AND (b.title LIKE ? OR b.author LIKE ?)
+        LIMIT {DEFAULT_TOP_K}
+        """
+
+        params = [era_min, era_max, f"%{keyword}%", f"%{keyword}%"]
+
+        try:
+            with self._get_connection(db_path) as conn:
+                cursor = conn.execute(sql, params)
+                rows = cursor.fetchall()
+        except Exception as e:
+            logger.error("Fallback search failed on %s: %s", config["path"], e)
+            return []
+
+        results = []
+        for row in rows:
+            results.append({
+                "item_id": str(row[0]),
+                "title": str(row[1] if row[1] else "不明"),
+                "author": str(row[2] if row[2] else "不明"),
+                "source": str(row[3] if row[3] else "不明"),
+                "category": str(row[4]),
+                "distance": row[9],
+                "vector": [
+                    float(row[5] if row[5] is not None else 0.5),
+                    float(row[6] if row[6] is not None else 0.5),
+                    float(row[7] if row[7] is not None else 0.5),
+                    float(row[8] if row[8] is not None else 0.5),
+                ],
+            })
+        return results
+
     def search_closest_book(
         self,
         query_text: str = None,
@@ -155,7 +217,10 @@ class LemmaSearchEngine:
         """全DBを横断し、384Dベクトルとメタデータフィルタで書籍を抽出する。"""
         # クエリテキストが存在しない場合（スライダーのみの操作時）のフォールバック
         search_text = query_text if query_text else "おすすめの面白い本"
-        query_vec = self.model.encode([search_text])[0]
+        
+        # e5-smallモデルの仕様に合わせ、アシンメトリック検索用に "query: " プレフィックスを付与
+        search_text_prefixed = f"query: {search_text}"
+        query_vec = self.model.encode([search_text_prefixed])[0]
         serialized_vec = sqlite_vec.serialize_float32(query_vec)
 
         # 全DBを横断検索し、候補を統合
@@ -165,6 +230,15 @@ class LemmaSearchEngine:
                 config, serialized_vec, era_min, era_max, target_origin, keyword
             )
             all_candidates.extend(candidates)
+
+        # ベクトル検索で候補が得られず、キーワードがある場合は部分一致によるテキスト検索にフォールバック
+        if not all_candidates and keyword:
+            logger.info("KNN results empty. Falling back to SQL LIKE search for: %s", keyword)
+            for config in DB_CONFIGS:
+                candidates = self._search_single_db_fallback(
+                    config, era_min, era_max, target_origin, keyword
+                )
+                all_candidates.extend(candidates)
 
         if not all_candidates:
             return {

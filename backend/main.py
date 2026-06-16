@@ -77,13 +77,18 @@ async def search_book(req: SearchPayload):
             v, category, extracted_keyword = QueryVectorizer.vectorize(req.query)
             era_mid = v[0]
             # クエリに明示的な年代キーワードが含まれている場合のみ年代フィルタを適用し、それ以外は全年代を対象とする
-            if any(k in req.query for k in ["古典", "明治", "大正", "近代", "昭和", "戦後", "現代", "最近", "新刊"]):
+            if era_mid is not None and any(k in req.query for k in ["古典", "明治", "大正", "近代", "昭和", "戦後", "現代", "最近", "新刊"]):
                 era_min = max(0.0, era_mid - NLP_ERA_MARGIN)
                 era_max = min(1.0, era_mid + NLP_ERA_MARGIN)
-            else:
-                era_min = 0.0
-                era_max = 1.0
-            origin, style, renown = v[1], v[2], v[3]
+            
+            # クエリから明示的に判定された属性のみ上書きする（未検出の項目はスライダー値を維持）
+            if v[1] is not None:
+                origin = v[1]
+            if v[2] is not None:
+                style = v[2]
+            if v[3] is not None:
+                renown = v[3]
+
             # クエリ全文がそのままキーワードとして抽出された場合は、部分一致用のキーワードとしては無視する
             if extracted_keyword and extracted_keyword.lower() != req.query.lower():
                 keyword = extracted_keyword

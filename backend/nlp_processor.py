@@ -102,24 +102,24 @@ class QueryVectorizer:
         return None
 
     @classmethod
-    def vectorize(cls, query: str) -> Tuple[list[float], Optional[str], Optional[str]]:
+    def vectorize(cls, query: str) -> Tuple[list[Optional[float]], Optional[str], Optional[str]]:
         """
         クエリから [ERA, ORIGIN, STYLE, RENOWN] ベクトル、カテゴリ、キーワードを抽出。
 
         Returns:
             (vector, category, keyword) のタプル
         """
-        vector = [DEFAULT_ERA, DEFAULT_ORIGIN, DEFAULT_STYLE, DEFAULT_RENOWN]
+        vector = [None, None, None, None]
         category: str | None = None
         keyword: str | None = None
 
         query_lower = query.lower()
 
         # 各軸のキーワード検知
-        vector[0] = cls._detect_value(query_lower, _ERA_KEYWORDS) or DEFAULT_ERA
-        vector[1] = cls._detect_value(query_lower, _ORIGIN_KEYWORDS) or DEFAULT_ORIGIN
-        vector[2] = cls._detect_value(query_lower, _STYLE_KEYWORDS) or DEFAULT_STYLE
-        vector[3] = cls._detect_value(query_lower, _RENOWN_KEYWORDS) or DEFAULT_RENOWN
+        vector[0] = cls._detect_value(query_lower, _ERA_KEYWORDS)
+        vector[1] = cls._detect_value(query_lower, _ORIGIN_KEYWORDS)
+        vector[2] = cls._detect_value(query_lower, _STYLE_KEYWORDS)
+        vector[3] = cls._detect_value(query_lower, _RENOWN_KEYWORDS)
 
         # カテゴリの検知
         for kw, cat in _CATEGORY_KEYWORDS.items():
