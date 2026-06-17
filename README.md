@@ -4,6 +4,14 @@
 
 ユーザーは単一のテキストポート（Zero-Routing UI）に自然言語やキーワードを投げ込むだけで、最適な一冊を抽出できる。
 
+## デモ
+
+| 入力（Zero-Routing UI） | 抽出結果（EXTRACTION COMPLETE） |
+|---|---|
+| ![Lemma UI](docs/screenshots/lemma-ui.png) | ![検索結果](docs/screenshots/lemma-result.png) |
+
+> 例: 「孤独と喪失をめぐる、静かで詩的な長編小説」という自然言語クエリを 384 次元ベクトルへ変換し、120 万件の空間から最近傍の一冊（`distance: 0.5079`）を抽出。四象限ベクトル `[ERA, ORIGIN, STYLE, RENOWN]` も同時に返却する。
+
 ---
 
 ## 解決する課題
