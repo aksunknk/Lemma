@@ -96,13 +96,6 @@ class LemmaSearchEngine:
         elif target_origin >= ORIGIN_FOREIGN_FLOOR:
             origin_condition = "AND b.origin >= 0.5"
 
-        # キーワードによる絞り込み
-        keyword_condition = ""
-        if keyword:
-            keyword_condition = "AND (b.title LIKE ? OR b.author LIKE ?)"
-            like_kw = f"%{keyword}%"
-            params.extend([like_kw, like_kw])
-
         sql = f"""
         SELECT b.rowid, b.title, b.author, b.{publisher_col}, '{category}' as category,
                b.era, b.origin, b.style, b.renown, v.distance
@@ -113,9 +106,8 @@ class LemmaSearchEngine:
         JOIN {table} b ON v.id = b.rowid
         WHERE b.era BETWEEN ? AND ?
           {origin_condition}
-          {keyword_condition}
         ORDER BY v.distance
-        LIMIT {DEFAULT_TOP_K}
+        LIMIT {DEFAULT_TOP_K * 20}
         """
 
         try:
@@ -128,13 +120,21 @@ class LemmaSearchEngine:
 
         results = []
         for row in rows:
+            title = str(row[1] if row[1] else "不明")
+            author = str(row[2] if row[2] else "不明")
+            dist = row[9]
+            
+            # キーワードボーナスの適用（タイトルまたは著者にキーワードが含まれていれば距離を縮める）
+            if keyword and (keyword.lower() in title.lower() or keyword.lower() in author.lower()):
+                dist -= 0.15
+
             results.append({
                 "item_id": str(row[0]),
-                "title": str(row[1] if row[1] else "不明"),
-                "author": str(row[2] if row[2] else "不明"),
+                "title": title,
+                "author": author,
                 "source": str(row[3] if row[3] else "不明"),
                 "category": str(row[4]),
-                "distance": row[9],
+                "distance": dist,
                 "vector": [
                     float(row[5] if row[5] is not None else 0.5),
                     float(row[6] if row[6] is not None else 0.5),
@@ -174,11 +174,10 @@ class LemmaSearchEngine:
         FROM {table} b
         WHERE b.era BETWEEN ? AND ?
           {origin_condition}
-          AND (b.title LIKE ? OR b.author LIKE ?)
-        LIMIT {DEFAULT_TOP_K}
+        LIMIT {DEFAULT_TOP_K * 10}
         """
 
-        params = [era_min, era_max, f"%{keyword}%", f"%{keyword}%"]
+        params = [era_min, era_max]
 
         try:
             with self._get_connection(db_path) as conn:
@@ -190,13 +189,20 @@ class LemmaSearchEngine:
 
         results = []
         for row in rows:
+            title = str(row[1] if row[1] else "不明")
+            author = str(row[2] if row[2] else "不明")
+            dist = row[9]
+            
+            if keyword and (keyword.lower() in title.lower() or keyword.lower() in author.lower()):
+                dist -= 0.15
+
             results.append({
                 "item_id": str(row[0]),
-                "title": str(row[1] if row[1] else "不明"),
-                "author": str(row[2] if row[2] else "不明"),
+                "title": title,
+                "author": author,
                 "source": str(row[3] if row[3] else "不明"),
                 "category": str(row[4]),
-                "distance": row[9],
+                "distance": dist,
                 "vector": [
                     float(row[5] if row[5] is not None else 0.5),
                     float(row[6] if row[6] is not None else 0.5),
@@ -218,6 +224,10 @@ class LemmaSearchEngine:
         # クエリテキストが存在しない場合（スライダーのみの操作時）のフォールバック
         search_text = query_text if query_text else "おすすめの面白い本"
         
+        # キーワードが存在する場合はクエリテキストに統合し、ベクトル検索の意味を強める
+        if keyword:
+            search_text = f"{keyword} {search_text}"
+
         # e5-smallモデルの仕様に合わせ、アシンメトリック検索用に "query: " プレフィックスを付与
         search_text_prefixed = f"query: {search_text}"
         query_vec = self.model.encode([search_text_prefixed])[0]
@@ -231,9 +241,9 @@ class LemmaSearchEngine:
             )
             all_candidates.extend(candidates)
 
-        # ベクトル検索で候補が得られず、キーワードがある場合は部分一致によるテキスト検索にフォールバック
-        if not all_candidates and keyword:
-            logger.info("KNN results empty. Falling back to SQL LIKE search for: %s", keyword)
+        # ベクトル検索で候補が得られなかった場合のフォールバック（純粋なメタデータ検索）
+        if not all_candidates:
+            logger.info("KNN results empty. Falling back to SQL search.")
             for config in DB_CONFIGS:
                 candidates = self._search_single_db_fallback(
                     config, era_min, era_max, target_origin, keyword
@@ -247,7 +257,7 @@ class LemmaSearchEngine:
                 "min_distance": None,
             }
 
-        # 全候補を距離順にソートし、上位K件からランダム抽出（ゆらぎ）
+        # 全候補をボーナス計算後の距離順に再ソートし、上位K件からランダム抽出（ゆらぎ）
         all_candidates.sort(key=lambda x: x["distance"])
         top_candidates = all_candidates[:DEFAULT_TOP_K]
         best_item = random.choice(top_candidates)
@@ -255,3 +265,40 @@ class LemmaSearchEngine:
         best_item["distance"] = round(best_item["distance"], 4)
 
         return best_item
+
+    def extract_centroid(self, titles: list[str]) -> list[dict]:
+        """複数のタイトルの重心ベクトルを計算し、類似するトップ5件を返す。"""
+        import numpy as np
+        if not titles:
+            return []
+            
+        # e5-smallモデルのアシンメトリック検索仕様に基づきクエリ化
+        search_texts = [f"query: {title}" for title in titles]
+        vectors = self.model.encode(search_texts)
+        
+        # 複数ベクトルの重心（要素ごとの平均）を計算
+        centroid = np.mean(vectors, axis=0)
+        serialized_vec = sqlite_vec.serialize_float32(centroid)
+        
+        all_candidates = []
+        for config in DB_CONFIGS:
+            candidates = self._search_single_db(
+                config, serialized_vec, 0.0, 1.0, 0.5, None
+            )
+            all_candidates.extend(candidates)
+            
+        # 距離でソート
+        all_candidates.sort(key=lambda x: x["distance"])
+        
+        filtered_candidates = []
+        # 元のタイトルと完全一致（大文字小文字無視）するものを除外
+        lower_titles = set(t.lower() for t in titles)
+        for c in all_candidates:
+            if c["title"].lower() not in lower_titles:
+                c["status"] = 200
+                c["distance"] = round(c["distance"], 4)
+                filtered_candidates.append(c)
+                if len(filtered_candidates) == 5:
+                    break
+                    
+        return filtered_candidates

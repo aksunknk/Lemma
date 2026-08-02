@@ -53,6 +53,9 @@ class SearchPayload(BaseModel):
     renown: Optional[float] = None
     keyword: Optional[str] = None
 
+class CentroidPayload(BaseModel):
+    titles: list[str]
+
 class SearchResult(BaseModel):
     status: int
     item_id: str
@@ -124,6 +127,17 @@ async def search_book(req: SearchPayload):
         raise
     except Exception as e:
         logger.exception("Unexpected error during search")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/extract_centroid")
+async def extract_centroid(req: CentroidPayload):
+    if not req.titles:
+        raise HTTPException(status_code=400, detail="titles list cannot be empty")
+    try:
+        results = engine.extract_centroid(req.titles)
+        return results
+    except Exception as e:
+        logger.exception("Unexpected error during extract_centroid")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
