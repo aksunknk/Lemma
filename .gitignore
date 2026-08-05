@@ -30,6 +30,7 @@ backend/.venv/
 *.exe
 *.zip
 *.tar.gz
+*.lnk
 
 # --- データファイル ---
 *.csv
@@ -39,6 +40,11 @@ backend/.venv/
 !frontend/package-lock.json
 !frontend/tsconfig.json
 !frontend/tsconfig.node.json
+!desktop/package.json
+!desktop/package-lock.json
+!desktop/tsconfig*.json
+!desktop/src-tauri/tauri.conf.json
+!desktop/src-tauri/capabilities/*.json
 *.png
 *.jpg
 *.jpeg
@@ -50,6 +56,7 @@ raw_books_*.json
 *.log
 *.txt
 !requirements.txt
+backend_backup/
 
 # --- レガシースクリプト（ルート直下） ---
 # データ投入・デバッグ用の一度きりスクリプト
@@ -100,6 +107,15 @@ frontend/dist/
 frontend/dist-ssr/
 frontend/.vite/
 frontend/.wrangler/
+
+# --- Desktop (Tauri + Vite) ---
+desktop/node_modules/
+desktop/dist/
+desktop/dist-ssr/
+desktop/.vite/
+desktop/src-tauri/target/
+desktop/.env*
+!desktop/.env.example
 
 # --- ツール・エディタ ---
 .DS_Store
