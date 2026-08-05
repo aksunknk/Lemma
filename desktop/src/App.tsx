@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ZeroRoutingInput } from "./components/ZeroRoutingInput";
 import { TheGrid } from "./components/TheGrid";
 import { FooterBar } from "./components/FooterBar";
@@ -11,6 +11,7 @@ import {
   deleteLog,
 } from "./services/tauriCommands";
 import { exportLogsToCsv, importLogsFromCsv } from "./services/csvSync";
+import { fetchBibliographyForTitle } from "./services/googleBooks";
 import { CandidateItem, LogStatus, ReadingLog, UpdateLogPayload } from "./types";
 
 export const App: React.FC = () => {
@@ -20,6 +21,9 @@ export const App: React.FC = () => {
   const [inferenceResults, setInferenceResults] = useState<CandidateItem[]>([]);
   const [isInferenceModalOpen, setIsInferenceModalOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>("SYSTEM INITIALIZING...");
+  // Auto-Fill progress: null = idle, { done, total } = running
+  const [autoFillProgress, setAutoFillProgress] = useState<{ done: number; total: number } | null>(null);
+  const autoFillRunning = useRef(false);
 
   // Load logs on startup
   const fetchAllLogs = async () => {
@@ -199,6 +203,61 @@ export const App: React.FC = () => {
     }
   };
 
+  // ── AUTO-FILL BATCH ─────────────────────────────────────────────────────────
+  // Targets records where author OR isbn is absent.
+  // Fetches Google Books 1 title at a time with a 1000–1500ms jitter delay.
+  const runAutoFill = async () => {
+    if (autoFillRunning.current) return;
+
+    const targets = logs.filter(
+      (l) => !l.author || !l.isbn
+    );
+    if (targets.length === 0) {
+      setStatusMessage("AUTO-FILL: NO INCOMPLETE RECORDS FOUND");
+      return;
+    }
+
+    autoFillRunning.current = true;
+    setAutoFillProgress({ done: 0, total: targets.length });
+    setStatusMessage(`AUTO-FILL INITIATED [${targets.length} RECORDS TARGETED]`);
+
+    let filled = 0;
+    for (const log of targets) {
+      try {
+        const bib = await fetchBibliographyForTitle(log.title);
+        if (bib && (bib.author || bib.publisher || bib.isbn)) {
+          const payload: UpdateLogPayload = {
+            id: log.id,
+            author: bib.author ?? log.author,
+            publisher: bib.publisher ?? log.publisher,
+            isbn: bib.isbn ?? log.isbn,
+          };
+          const updated = await updateLog(payload);
+          setLogs((prev) => prev.map((l) => (l.id === log.id ? updated : l)));
+          filled++;
+        }
+      } catch (err) {
+        // Silent skip — log to console only
+        console.warn(`[AutoFill] skipped "${log.title}":`, err);
+      }
+
+      // Advance progress counter
+      setAutoFillProgress((prev) =>
+        prev ? { done: prev.done + 1, total: prev.total } : null
+      );
+
+      // Jitter delay 1000–1500ms to respect rate limits
+      await new Promise((resolve) =>
+        setTimeout(resolve, 1000 + Math.floor(Math.random() * 500))
+      );
+    }
+
+    autoFillRunning.current = false;
+    setAutoFillProgress(null);
+    setStatusMessage(`AUTO-FILL COMPLETE: ${filled}/${targets.length} RECORDS ENRICHED`);
+  };
+  // ────────────────────────────────────────────────────────────────────────────
+
   return (
     <div className="flex h-screen w-screen flex-col bg-[#020408] text-[#00e5ff] overflow-hidden font-mono antialiased">
       {/* 1. Header & Zero-Routing Command Port */}
@@ -219,6 +278,8 @@ export const App: React.FC = () => {
         onCycleStatus={handleCycleStatus}
         onDeleteLog={handleDeleteLog}
         onEditLog={(log) => setEditingLog(log)}
+        onAutoFill={runAutoFill}
+        autoFillProgress={autoFillProgress}
       />
 
       {/* 3. Footer with Resonance Pool & Centroid Trigger */}

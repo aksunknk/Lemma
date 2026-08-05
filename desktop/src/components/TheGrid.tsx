@@ -14,6 +14,8 @@ interface TheGridProps {
   onCycleStatus: (log: ReadingLog) => void;
   onDeleteLog: (id: string) => void;
   onEditLog: (log: ReadingLog) => void;
+  onAutoFill: () => void;
+  autoFillProgress: { done: number; total: number } | null;
 }
 
 export const TheGrid: React.FC<TheGridProps> = ({
@@ -25,6 +27,8 @@ export const TheGrid: React.FC<TheGridProps> = ({
   onCycleStatus,
   onDeleteLog,
   onEditLog,
+  onAutoFill,
+  autoFillProgress,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
@@ -134,7 +138,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
         return (
           <span
             className="font-mono inline-block border border-emerald-500/40 bg-emerald-950/40 text-emerald-400 px-2 py-0.5 text-[11px] font-semibold tracking-wider uppercase cursor-pointer hover:border-emerald-300 hover:bg-emerald-900/50 transition-colors"
-            title="Click to cycle status"
           >
             [READING]
           </span>
@@ -143,7 +146,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
         return (
           <span
             className="font-mono inline-block border border-sky-500/40 bg-sky-950/40 text-sky-400 px-2 py-0.5 text-[11px] font-semibold tracking-wider uppercase cursor-pointer hover:border-sky-300 hover:bg-sky-900/50 transition-colors"
-            title="Click to cycle status"
           >
             [READ]
           </span>
@@ -152,7 +154,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
         return (
           <span
             className="font-mono inline-block border border-rose-500/40 bg-rose-950/40 text-rose-400 px-2 py-0.5 text-[11px] font-semibold tracking-wider uppercase cursor-pointer hover:border-rose-300 hover:bg-rose-900/50 transition-colors"
-            title="Click to cycle status"
           >
             [ABANDONED]
           </span>
@@ -162,7 +163,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
         return (
           <span
             className="font-mono inline-block border border-slate-700/50 bg-slate-900/50 text-slate-400 px-2 py-0.5 text-[11px] font-semibold tracking-wider uppercase cursor-pointer hover:border-slate-500 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
-            title="Click to cycle status"
           >
             [UNREAD]
           </span>
@@ -175,7 +175,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
       return (
         <span
           className="font-mono inline-block border border-[#00e5ff] bg-[#00e5ff]/20 text-[#00e5ff] px-2 py-0.5 text-[11px] font-bold tracking-wider cursor-pointer hover:bg-[#00e5ff]/35 transition-colors"
-          title="Click to toggle resonance"
         >
           [● RES]
         </span>
@@ -184,7 +183,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
     return (
       <span
         className="font-mono inline-block border border-cyan-900/40 bg-transparent text-cyan-700 px-2 py-0.5 text-[11px] tracking-wider cursor-pointer hover:border-cyan-600 hover:text-cyan-400 transition-colors"
-        title="Click to toggle resonance"
       >
         [○ ---]
       </span>
@@ -274,8 +272,24 @@ export const TheGrid: React.FC<TheGridProps> = ({
           </button>
         </div>
 
-        {/* Right: Quick Search Input */}
+        {/* Right: Auto-Fill + Quick Search Input */}
         <div className="flex items-center space-x-2 shrink-0">
+          {/* AUTO-FILL trigger */}
+          <button
+            type="button"
+            onClick={onAutoFill}
+            disabled={autoFillProgress !== null}
+            className={`font-mono text-[10px] px-2.5 py-1 border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+              autoFillProgress !== null
+                ? "border-amber-600/60 bg-amber-950/30 text-amber-400 tracking-wider"
+                : "border-cyan-900/60 bg-transparent text-cyan-600 hover:border-cyan-500 hover:text-cyan-300"
+            }`}
+          >
+            {autoFillProgress !== null
+              ? `[ FILLING: ${autoFillProgress.done} / ${autoFillProgress.total} ]`
+              : "[ AUTO-FILL ]"}
+          </button>
+
           <div className="relative flex items-center">
             <span className="font-mono text-[10px] text-cyan-600 mr-1.5 select-none">
               FILTER://
@@ -292,7 +306,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
                 type="button"
                 onClick={() => setSearchQuery("")}
                 className="absolute right-1.5 font-mono text-[10px] text-cyan-600 hover:text-rose-400 cursor-pointer"
-                title="Clear filter"
               >
                 [✕]
               </button>
@@ -304,6 +317,7 @@ export const TheGrid: React.FC<TheGridProps> = ({
         </div>
       </div>
 
+
       {/* Main Grid Container */}
       <div className="border border-cyan-900/40 bg-[#020408] flex-1">
         {/* Grid Header with Clickable Sorting */}
@@ -311,42 +325,36 @@ export const TheGrid: React.FC<TheGridProps> = ({
           <div
             className="col-span-1 text-center cursor-pointer hover:text-[#00e5ff] transition-colors"
             onClick={() => handleSortHeaderClick("resonance")}
-            title="Sort by Resonance"
           >
             RES {renderSortIndicator("resonance")}
           </div>
           <div
             className="col-span-1 text-center cursor-pointer hover:text-[#00e5ff] transition-colors"
             onClick={() => handleSortHeaderClick("status")}
-            title="Sort by Status"
           >
             STATUS {renderSortIndicator("status")}
           </div>
           <div
             className="col-span-4 cursor-pointer hover:text-[#00e5ff] transition-colors"
             onClick={() => handleSortHeaderClick("title")}
-            title="Sort by Title"
           >
             TITLE {renderSortIndicator("title")}
           </div>
           <div
             className="col-span-2 cursor-pointer hover:text-[#00e5ff] transition-colors"
             onClick={() => handleSortHeaderClick("author")}
-            title="Sort by Author"
           >
             AUTHOR {renderSortIndicator("author")}
           </div>
           <div
             className="col-span-2 cursor-pointer hover:text-[#00e5ff] transition-colors"
             onClick={() => handleSortHeaderClick("period")}
-            title="Sort by Date / Period"
           >
             PERIOD / PUBLISHER {renderSortIndicator("period")}
           </div>
           <div
             className="col-span-1 text-right cursor-pointer hover:text-[#00e5ff] transition-colors"
             onClick={() => handleSortHeaderClick("isbn")}
-            title="Sort by ISBN"
           >
             ISBN {renderSortIndicator("isbn")}
           </div>
@@ -374,13 +382,13 @@ export const TheGrid: React.FC<TheGridProps> = ({
               </span>
             </div>
             <div className="col-span-2 truncate flex items-center font-sans text-[12px] text-slate-300">
-              {cand.author || "---"}
+              {cand.author ? cand.author : <span className="text-slate-800">---</span>}
             </div>
             <div className="col-span-2 truncate flex items-center font-sans text-[12px] text-slate-400">
-              {cand.publisher || "---"}
+              {cand.publisher ? cand.publisher : <span className="text-slate-800">---</span>}
             </div>
-            <div className="col-span-1 truncate flex items-center justify-end font-mono text-[11px] text-slate-500">
-              {cand.isbn || "---"}
+            <div className="col-span-1 truncate flex items-center justify-end font-mono text-[11px] text-cyan-600/80">
+              {cand.isbn ? cand.isbn : <span className="text-cyan-900/30">---</span>}
             </div>
             <div
               className="col-span-1 flex items-center justify-center"
@@ -392,7 +400,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
               <button
                 type="button"
                 className="font-mono border border-cyan-900/50 px-2 py-0.5 text-[10px] text-cyan-600 hover:border-rose-500 hover:bg-rose-950/30 hover:text-rose-400 transition-colors cursor-pointer"
-                title="Dismiss candidate"
               >
                 [×]
               </button>
@@ -413,7 +420,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
               className={`grid grid-cols-12 gap-3 border-b border-cyan-900/30 px-4 py-2.5 text-xs items-center hover:bg-[#0a1424] cursor-pointer group transition-colors duration-75 ${
                 isResonating ? "bg-cyan-950/15" : "bg-transparent"
               }`}
-              title="Double-click to open edit modal"
             >
               {/* Resonance Toggle */}
               <div
@@ -447,7 +453,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
                 {hasNotes && (
                   <span
                     className="font-mono text-[9px] border border-cyan-500/50 bg-cyan-950/50 text-[#00e5ff] px-1.5 py-0.2 shrink-0 tracking-tighter"
-                    title={`Notes: ${log.notes}`}
                   >
                     [NOTE]
                   </span>
@@ -456,7 +461,7 @@ export const TheGrid: React.FC<TheGridProps> = ({
 
               {/* Author */}
               <div className="col-span-2 font-sans text-[12px] text-slate-300 tracking-normal truncate">
-                {log.author || "---"}
+                {log.author ? log.author : <span className="text-slate-800">---</span>}
               </div>
 
               {/* Period / Publisher */}
@@ -469,7 +474,7 @@ export const TheGrid: React.FC<TheGridProps> = ({
                   </div>
                 ) : (
                   <span className="font-sans text-[12px] text-slate-400 truncate">
-                    {log.publisher || "---"}
+                    {log.publisher ? log.publisher : <span className="text-slate-800">---</span>}
                   </span>
                 )}
                 {hasDates && log.publisher && (
@@ -481,7 +486,7 @@ export const TheGrid: React.FC<TheGridProps> = ({
 
               {/* ISBN */}
               <div className="col-span-1 text-right font-mono text-[11px] text-cyan-600/80 truncate">
-                {log.isbn || "---"}
+                {log.isbn ? log.isbn : <span className="text-cyan-900/30">---</span>}
               </div>
 
               {/* Actions: Edit & Delete */}
@@ -493,7 +498,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
                     onEditLog(log);
                   }}
                   className="font-mono border border-cyan-950 px-1.5 py-0.5 text-[10px] text-cyan-600 hover:border-[#00e5ff] hover:text-[#00e5ff] hover:bg-[#00e5ff]/10 transition-colors cursor-pointer"
-                  title="Edit details & notes"
                 >
                   [EDIT]
                 </button>
@@ -504,7 +508,6 @@ export const TheGrid: React.FC<TheGridProps> = ({
                     onDeleteLog(log.id);
                   }}
                   className="font-mono border border-cyan-950 px-1.5 py-0.5 text-[10px] text-cyan-800 hover:border-rose-500 hover:bg-rose-950/40 hover:text-rose-400 transition-colors cursor-pointer"
-                  title="Delete log"
                 >
                   [✕]
                 </button>

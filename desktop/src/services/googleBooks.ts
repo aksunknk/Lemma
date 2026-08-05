@@ -123,3 +123,32 @@ export async function searchByTitle(title: string): Promise<NewReadingLog> {
 export async function searchByAuthor(author: string): Promise<CandidateItem[]> {
   return searchBooksFlexible(undefined, author, 5);
 }
+
+/** Fetch only bibliographic fill data (author, publisher, isbn) for a single title.
+ *  Used exclusively by the Auto-Fill batch process. Returns null if nothing found. */
+export async function fetchBibliographyForTitle(title: string): Promise<{
+  author: string | null;
+  publisher: string | null;
+  isbn: string | null;
+} | null> {
+  const query = `intitle:${title.trim()}`;
+  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=1`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(`[AutoFill] Google Books API ${res.status} for "${title}"`);
+      return null;
+    }
+    const data = await res.json();
+    if (!data.items || data.items.length === 0) return null;
+    const volume = (data.items[0] as GoogleBookItem).volumeInfo;
+    return {
+      author: volume.authors ? volume.authors.join(", ") : null,
+      publisher: volume.publisher || null,
+      isbn: extractIsbn(volume.industryIdentifiers),
+    };
+  } catch (err) {
+    console.warn(`[AutoFill] fetch error for "${title}":`, err);
+    return null;
+  }
+}
