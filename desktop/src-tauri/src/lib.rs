@@ -24,9 +24,15 @@ pub struct CentroidResponseItem {
     pub status: Option<i32>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CentroidRequestItem {
+    pub title: String,
+    pub date: Option<String>,
+}
+
 #[derive(Serialize)]
 struct CentroidRequestPayload<'a> {
-    titles: &'a [String],
+    items: &'a [CentroidRequestItem],
 }
 
 #[tauri::command]
@@ -70,7 +76,7 @@ fn batch_add_logs(state: State<'_, DbState>, logs: Vec<NewReadingLog>) -> Result
 
 #[tauri::command]
 async fn extract_centroid_api(
-    titles: Vec<String>,
+    items: Vec<CentroidRequestItem>,
     api_url: Option<String>,
 ) -> Result<Vec<CentroidResponseItem>, String> {
     let base_url = api_url.unwrap_or_else(|| "http://192.168.0.130:8000".to_string());
@@ -83,7 +89,7 @@ async fn extract_centroid_api(
 
     let res = client
         .post(&endpoint)
-        .json(&CentroidRequestPayload { titles: &titles })
+        .json(&CentroidRequestPayload { items: &items })
         .send()
         .await
         .map_err(|e| format!("Connection to Lemma API failed ({}): {}", endpoint, e))?;
@@ -94,12 +100,12 @@ async fn extract_centroid_api(
         return Err(format!("Lemma API error (HTTP {}): {}", status, body));
     }
 
-    let items = res
+    let resp_items = res
         .json::<Vec<CentroidResponseItem>>()
         .await
         .map_err(|e| format!("Failed to parse Lemma API JSON response: {}", e))?;
 
-    Ok(items)
+    Ok(resp_items)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

@@ -23,6 +23,22 @@ export const FooterBar: React.FC<FooterBarProps> = ({
   const resonantLogs = logs.filter((l) => l.resonance === 1);
   const resonanceCount = resonantLogs.length;
 
+  const isDateValid = (val: string | null | undefined): boolean => {
+    if (!val) return false;
+    const trimmed = val.trim();
+    return trimmed !== "" && trimmed !== "---" && trimmed !== "null" && trimmed !== "undefined";
+  };
+
+  const extractLogDate = (log: ReadingLog): string | null => {
+    if (isDateValid(log.finished_at)) {
+      return log.finished_at!.trim();
+    }
+    if (isDateValid(log.started_at)) {
+      return log.started_at!.trim();
+    }
+    return null;
+  };
+
   const handleExtractCentroid = async () => {
     if (resonanceCount === 0 || isExtracting) return;
 
@@ -30,8 +46,11 @@ export const FooterBar: React.FC<FooterBarProps> = ({
     setStatusMessage(`CALCULATING CENTROID FOR ${resonanceCount} RESONANT TITLES...`);
 
     try {
-      const titles = resonantLogs.map((l) => l.title);
-      const candidates = await extractCentroid(titles);
+      const items = resonantLogs.map((l) => ({
+        title: l.title,
+        date: extractLogDate(l),
+      }));
+      const candidates = await extractCentroid(items);
 
       if (candidates.length === 0) {
         setStatusMessage("LEMMA API: NO RECOMMENDATIONS RETURNED");

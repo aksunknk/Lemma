@@ -8,10 +8,58 @@ import sqlite3
 import random
 import logging
 import os
+import math
+import datetime
+import numpy as np
 import sqlite_vec
 from sentence_transformers import SentenceTransformer
+from sklearn.cluster import KMeans
 
 logger = logging.getLogger("lemma.engine")
+
+DEFAULT_BASELINE_WEIGHT = 0.3
+DEFAULT_HALF_LIFE_DAYS = 180.0
+
+
+def calculate_time_decay(
+    date_str: str | None,
+    baseline_weight: float = DEFAULT_BASELINE_WEIGHT,
+    half_life_days: float = DEFAULT_HALF_LIFE_DAYS,
+) -> float:
+    """
+    各アイテムのウェイト（重み）を計算する。
+    - 日付（date）が YYYY-MM-DD 形式で存在する場合:
+      現在日付からの経過日数を計算し、半減期を180日とする指数関数的減衰（exp(-lambda * days)）を計算してウェイトとする。
+    - 日付が空（null）またはパースエラーの場合:
+      過去の遺産として固定のベースライン・ウェイト（0.3）を返す。
+    """
+    if not date_str or not isinstance(date_str, str) or not date_str.strip():
+        return baseline_weight
+
+    date_clean = date_str.strip()
+    parsed_date = None
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
+        try:
+            parsed_date = datetime.datetime.strptime(date_clean[:10], fmt).date()
+            break
+        except (ValueError, TypeError):
+            continue
+
+    if parsed_date is None:
+        try:
+            parsed_date = datetime.date.fromisoformat(date_clean[:10])
+        except (ValueError, TypeError):
+            return baseline_weight
+
+    today = datetime.date.today()
+    days = (today - parsed_date).days
+    if days < 0:
+        days = 0
+
+    decay_lambda = math.log(2) / half_life_days
+    weight = math.exp(-decay_lambda * days)
+    return float(weight)
+
 
 DEFAULT_TOP_K = 5
 KNN_CANDIDATES = 1000
@@ -266,39 +314,94 @@ class LemmaSearchEngine:
 
         return best_item
 
-    def extract_centroid(self, titles: list[str]) -> list[dict]:
-        """複数のタイトルの重心ベクトルを計算し、類似するトップ5件を返す。"""
-        import numpy as np
-        if not titles:
+    def extract_centroid(self, items: list[dict] | list[str]) -> list[dict]:
+        """
+        タイム・ディケイ（時間的減衰）とマルチ・セントロイド（多極重心化）を適用し、
+        類似するトップ5件の書籍リストを返す。
+        """
+        if not items:
             return []
-            
-        # e5-smallモデルのアシンメトリック検索仕様に基づきクエリ化
-        search_texts = [f"query: {title}" for title in titles]
-        vectors = self.model.encode(search_texts)
-        
-        # 複数ベクトルの重心（要素ごとの平均）を計算
-        centroid = np.mean(vectors, axis=0)
-        serialized_vec = sqlite_vec.serialize_float32(centroid)
-        
+
+        # 入力形式の正規化（dict, str, または属性持ちオブジェクトを統一）
+        normalized_items = []
+        for item in items:
+            if isinstance(item, str):
+                title = item.strip()
+                if title:
+                    normalized_items.append({"title": title, "date": None})
+            elif isinstance(item, dict):
+                title = str(item.get("title", "")).strip()
+                date_val = item.get("date")
+                if title:
+                    normalized_items.append({"title": title, "date": date_val})
+            elif hasattr(item, "title"):
+                title = str(getattr(item, "title", "")).strip()
+                date_val = getattr(item, "date", None)
+                if title:
+                    normalized_items.append({"title": title, "date": date_val})
+
+        if not normalized_items:
+            return []
+
+        # 1. タイム・ディケイ計算
+        weights = np.array(
+            [calculate_time_decay(it["date"]) for it in normalized_items],
+            dtype=np.float32,
+        )
+
+        # 2. 各アイテムの文字列をベクトル化
+        search_texts = [f"query: {it['title']}" for it in normalized_items]
+        vectors = np.array(self.model.encode(search_texts), dtype=np.float32)
+
+        # 3. ウェイトを掛け合わせる（スカラー倍）
+        weighted_vectors = vectors * weights[:, np.newaxis]
+
+        # 4. アイテム数に応じたクラスタ数 k の決定
+        n_items = len(normalized_items)
+        if n_items <= 2:
+            k = 1
+        elif n_items <= 5:
+            k = 2
+        else:
+            k = 3
+
+        # KMeansクラスタリングの実行
+        if n_items == 1:
+            centroids = weighted_vectors
+        else:
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init="auto")
+            kmeans.fit(weighted_vectors)
+            centroids = kmeans.cluster_centers_
+
+        # 5. 各Centroidベクトルに対して全DBを横断検索
         all_candidates = []
-        for config in DB_CONFIGS:
-            candidates = self._search_single_db(
-                config, serialized_vec, 0.0, 1.0, 0.5, None
-            )
-            all_candidates.extend(candidates)
-            
-        # 距離でソート
-        all_candidates.sort(key=lambda x: x["distance"])
-        
-        filtered_candidates = []
-        # 元のタイトルと完全一致（大文字小文字無視）するものを除外
-        lower_titles = set(t.lower() for t in titles)
+        for centroid in centroids:
+            serialized_vec = sqlite_vec.serialize_float32(centroid.astype(np.float32))
+            for config in DB_CONFIGS:
+                candidates = self._search_single_db(
+                    config, serialized_vec, 0.0, 1.0, 0.5, None
+                )
+                all_candidates.extend(candidates)
+
+        # 6. クラスタ間重複の排除・マージおよび入力タイトルの除外
+        lower_input_titles = set(it["title"].lower() for it in normalized_items)
+        dedup_candidates = {}
         for c in all_candidates:
-            if c["title"].lower() not in lower_titles:
-                c["status"] = 200
-                c["distance"] = round(c["distance"], 4)
-                filtered_candidates.append(c)
-                if len(filtered_candidates) == 5:
-                    break
-                    
-        return filtered_candidates
+            c_title = c.get("title", "").strip()
+            c_title_lower = c_title.lower()
+            if c_title_lower in lower_input_titles:
+                continue
+
+            if c_title_lower not in dedup_candidates or c["distance"] < dedup_candidates[c_title_lower]["distance"]:
+                dedup_candidates[c_title_lower] = c
+
+        # 7. 距離昇順でソートし上位5件を返却
+        sorted_candidates = sorted(dedup_candidates.values(), key=lambda x: x["distance"])
+        top_5 = sorted_candidates[:DEFAULT_TOP_K]
+
+        for c in top_5:
+            c["status"] = 200
+            c["distance"] = round(c["distance"], 4)
+
+        return top_5
+

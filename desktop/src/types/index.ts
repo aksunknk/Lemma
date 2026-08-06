@@ -50,3 +50,9 @@ export interface CandidateItem {
   distance?: number;
   notes?: string | null;
 }
+
+export interface CentroidRequestItem {
+  title: string;
+  date: string | null;
+}
+

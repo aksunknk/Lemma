@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { LogStatus, ReadingLog, UpdateLogPayload } from "../types";
+import { CandidateItem, LogStatus, ReadingLog, UpdateLogPayload } from "../types";
+import { searchBooksFlexible } from "../services/googleBooks";
 
 interface EditModalProps {
   log: ReadingLog | null;
@@ -28,6 +29,13 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
+  // Candidate API search state
+  const [candidates, setCandidates] = useState<CandidateItem[]>([]);
+  const [isSearchingCandidates, setIsSearchingCandidates] = useState(false);
+  const [candidateFeedback, setCandidateFeedback] = useState<string | null>(null);
+  const [showCandidates, setShowCandidates] = useState(false);
+  const [lastAppliedId, setLastAppliedId] = useState<string | null>(null);
+
   useEffect(() => {
     if (log) {
       setTitle(log.title);
@@ -40,6 +48,10 @@ export const EditModal: React.FC<EditModalProps> = ({
       setFinishedAt(log.finished_at || "");
       setNotes(log.notes || "");
       setIsConfirmingDelete(false);
+      setCandidates([]);
+      setCandidateFeedback(null);
+      setShowCandidates(false);
+      setLastAppliedId(null);
     }
   }, [log, isOpen]);
 
@@ -55,6 +67,45 @@ export const EditModal: React.FC<EditModalProps> = ({
   }, [isOpen, onClose, isSaving]);
 
   if (!isOpen || !log) return null;
+
+  const handleSearchCandidates = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    const queryTitle = title.trim();
+    const queryAuthor = author.trim();
+    if (!queryTitle && !queryAuthor) {
+      setCandidateFeedback("SPECIFY TITLE OR AUTHOR TO QUERY API");
+      setShowCandidates(true);
+      return;
+    }
+
+    setIsSearchingCandidates(true);
+    setCandidateFeedback(null);
+    setShowCandidates(true);
+
+    try {
+      const results = await searchBooksFlexible(queryTitle || undefined, queryAuthor || undefined, 6);
+      setCandidates(results);
+      if (results.length === 0) {
+        setCandidateFeedback("NO MATCHING CANDIDATES FOUND");
+      } else {
+        setCandidateFeedback(`FOUND ${results.length} CANDIDATE(S) — CLICK TO POPULATE`);
+      }
+    } catch (err) {
+      console.error("Candidate lookup error:", err);
+      setCandidateFeedback("API QUERY FAILED");
+    } finally {
+      setIsSearchingCandidates(false);
+    }
+  };
+
+  const handleApplyCandidate = (c: CandidateItem) => {
+    setTitle(c.title);
+    setAuthor(c.author || "");
+    setPublisher(c.publisher || "");
+    setIsbn(c.isbn || "");
+    setLastAppliedId(c.tempId);
+    setCandidateFeedback(`APPLIED: "${c.title}"`);
+  };
 
   const handleSetTodayStarted = () => {
     setStartedAt(new Date().toISOString().slice(0, 10));
@@ -145,11 +196,21 @@ export const EditModal: React.FC<EditModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSave} className="space-y-3.5 flex-1">
-          {/* Title */}
+          {/* Title + API Search Button */}
           <div>
-            <label className="block font-mono text-[11px] font-bold text-cyan-400 uppercase tracking-wider mb-1">
-              Title <span className="text-rose-400">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block font-mono text-[11px] font-bold text-cyan-400 uppercase tracking-wider">
+                Title <span className="text-rose-400">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleSearchCandidates}
+                disabled={isSearchingCandidates || (!title.trim() && !author.trim())}
+                className="font-mono text-[10px] px-2.5 py-0.5 border border-cyan-700/70 bg-cyan-950/40 text-cyan-300 hover:border-[#00e5ff] hover:text-[#00e5ff] hover:bg-cyan-900/40 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isSearchingCandidates ? "[ 🔍 SEARCHING API... ]" : "[ 🔍 QUERY CANDIDATES ]"}
+              </button>
+            </div>
             <input
               type="text"
               required
@@ -158,6 +219,91 @@ export const EditModal: React.FC<EditModalProps> = ({
               className="w-full border border-cyan-900/80 bg-[#061224] px-3 py-2 font-sans text-sm text-[#e0f7fa] placeholder-cyan-800 focus:border-[#00e5ff] focus:ring-1 focus:ring-[#00e5ff]/30 focus:outline-none"
             />
           </div>
+
+          {/* Candidate Search Panel / Drawer */}
+          {showCandidates && (
+            <div className="border border-cyan-800/70 bg-[#020610] p-3 space-y-2 rounded-xs animate-in fade-in duration-150">
+              <div className="flex items-center justify-between font-mono text-[10px] border-b border-cyan-950 pb-1.5">
+                <span className="text-cyan-400 font-bold tracking-wider">
+                  // API CANDIDATE POOL [{candidates.length} RESULTS]
+                </span>
+                <div className="flex items-center space-x-2">
+                  {candidateFeedback && (
+                    <span className="text-emerald-400 font-medium truncate max-w-[280px]">
+                      {candidateFeedback}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowCandidates(false)}
+                    className="text-cyan-600 hover:text-cyan-300 cursor-pointer"
+                  >
+                    [✕ CLOSE]
+                  </button>
+                </div>
+              </div>
+
+              {candidates.length > 0 ? (
+                <div className="max-h-48 overflow-y-auto space-y-1 pr-1 divide-y divide-cyan-950/60">
+                  {candidates.map((c) => {
+                    const isSelected = lastAppliedId === c.tempId;
+                    return (
+                      <div
+                        key={c.tempId}
+                        onClick={() => handleApplyCandidate(c)}
+                        className={`pt-1.5 first:pt-0 flex items-center justify-between group p-2 transition-colors cursor-pointer border ${
+                          isSelected
+                            ? "border-emerald-500/80 bg-emerald-950/30"
+                            : "border-transparent hover:bg-[#05152c] hover:border-cyan-700/50"
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0 pr-3">
+                          <div
+                            className={`font-sans text-xs font-semibold truncate ${
+                              isSelected ? "text-emerald-300" : "text-cyan-100 group-hover:text-[#00e5ff]"
+                            }`}
+                          >
+                            {c.title}
+                          </div>
+                          <div className="font-mono text-[10px] text-cyan-500/80 flex items-center space-x-2 mt-0.5 truncate">
+                            <span>{c.author || "著者不明"}</span>
+                            <span className="text-cyan-800">|</span>
+                            <span>{c.publisher || "出版社不明"}</span>
+                            {c.isbn && (
+                              <>
+                                <span className="text-cyan-800">|</span>
+                                <span className="text-cyan-600">ISBN: {c.isbn}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApplyCandidate(c);
+                          }}
+                          className={`font-mono text-[10px] px-2 py-1 border transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                            isSelected
+                              ? "border-emerald-500 bg-emerald-500 text-[#020408] font-bold"
+                              : "border-cyan-800 bg-cyan-950/60 text-cyan-300 group-hover:border-[#00e5ff] group-hover:bg-[#00e5ff] group-hover:text-[#020408]"
+                          }`}
+                        >
+                          {isSelected ? "[ APPLIED ✓ ]" : "[ APPLY ↵ ]"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                !isSearchingCandidates && (
+                  <div className="font-mono text-xs text-cyan-700 py-2 text-center">
+                    NO CANDIDATES FOUND. TRY REFINING TITLE OR AUTHOR.
+                  </div>
+                )
+              )}
+            </div>
+          )}
 
           {/* Author & Publisher */}
           <div className="grid grid-cols-2 gap-3">

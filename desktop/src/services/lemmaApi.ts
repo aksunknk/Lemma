@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { CandidateItem } from "../types";
+import { CandidateItem, CentroidRequestItem } from "../types";
 
 export interface CentroidResponseItem {
   id?: string;
@@ -17,14 +17,14 @@ export interface CentroidResponseItem {
   status?: number;
 }
 
-export async function extractCentroid(titles: string[]): Promise<CandidateItem[]> {
-  if (titles.length === 0) return [];
+export async function extractCentroid(items: CentroidRequestItem[]): Promise<CandidateItem[]> {
+  if (items.length === 0) return [];
 
   const apiUrl = import.meta.env.VITE_LEMMA_API_URL || "http://192.168.0.130:8000";
 
   // Invoke native Rust command to bypass browser WebView CORS limitations completely
   const data = await invoke<CentroidResponseItem[]>("extract_centroid_api", {
-    titles,
+    items,
     apiUrl,
   });
 

@@ -203,28 +203,27 @@ export const App: React.FC = () => {
     }
   };
 
-  // ── AUTO-FILL BATCH ─────────────────────────────────────────────────────────
-  // Targets records where author OR isbn is absent.
-  // Fetches Google Books 1 title at a time with a 1000–1500ms jitter delay.
+  // ── AUTO-FILL BATCH (OVERWRITE MODE ENABLED) ──────────────────────────────
+  // Targets all records to re-fetch and correct previously corrupted bibliographic data.
   const runAutoFill = async () => {
     if (autoFillRunning.current) return;
 
-    const targets = logs.filter(
-      (l) => !l.author || !l.isbn
-    );
+    const targets = logs.filter((l) => l.title && l.title.trim() !== "");
     if (targets.length === 0) {
-      setStatusMessage("AUTO-FILL: NO INCOMPLETE RECORDS FOUND");
+      setStatusMessage("AUTO-FILL: NO RECORDS FOUND");
       return;
     }
 
     autoFillRunning.current = true;
     setAutoFillProgress({ done: 0, total: targets.length });
-    setStatusMessage(`AUTO-FILL INITIATED [${targets.length} RECORDS TARGETED]`);
+    setStatusMessage(`AUTO-FILL INITIATED [${targets.length} RECORDS TARGETED (OVERWRITE ENABLED)]`);
 
     let filled = 0;
     for (const log of targets) {
       try {
+        // Pure title search with scoring & openBD validation to correct wrong entries
         const bib = await fetchBibliographyForTitle(log.title);
+
         if (bib && (bib.author || bib.publisher || bib.isbn)) {
           const payload: UpdateLogPayload = {
             id: log.id,
@@ -254,7 +253,7 @@ export const App: React.FC = () => {
 
     autoFillRunning.current = false;
     setAutoFillProgress(null);
-    setStatusMessage(`AUTO-FILL COMPLETE: ${filled}/${targets.length} RECORDS ENRICHED`);
+    setStatusMessage(`AUTO-FILL COMPLETE: ${filled}/${targets.length} RECORDS RE-EVALUATED & UPDATED`);
   };
   // ────────────────────────────────────────────────────────────────────────────
 
