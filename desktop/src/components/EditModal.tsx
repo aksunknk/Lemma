@@ -17,16 +17,16 @@ export const EditModal: React.FC<EditModalProps> = ({
   onSave,
   onDelete,
 }) => {
-  const [title, setTitle] = useState("");
-  const [author, setAuthor] = useState("");
-  const [publisher, setPublisher] = useState("");
-  const [isbn, setIsbn] = useState("");
-  const [status, setStatus] = useState<LogStatus>("unread");
-  const [resonance, setResonance] = useState(0);
-  const [startedAt, setStartedAt] = useState("");
-  const [finishedAt, setFinishedAt] = useState("");
-  const [notes, setNotes] = useState("");
-  const [tags, setTags] = useState<string | null>(null);
+  const [title, setTitle] = useState(log?.title || "");
+  const [author, setAuthor] = useState(log?.author || "");
+  const [publisher, setPublisher] = useState(log?.publisher || "");
+  const [isbn, setIsbn] = useState(log?.isbn || "");
+  const [status, setStatus] = useState<LogStatus>(log?.status || "unread");
+  const [resonance, setResonance] = useState(log?.resonance ?? 0);
+  const [startedAt, setStartedAt] = useState(log?.started_at || "");
+  const [finishedAt, setFinishedAt] = useState(log?.finished_at || "");
+  const [notes, setNotes] = useState(log?.notes || "");
+  const [tags, setTags] = useState<string | null>(log?.tags || null);
   const [isSaving, setIsSaving] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
@@ -39,12 +39,12 @@ export const EditModal: React.FC<EditModalProps> = ({
 
   useEffect(() => {
     if (log) {
-      setTitle(log.title);
+      setTitle(log.title || "");
       setAuthor(log.author || "");
       setPublisher(log.publisher || "");
       setIsbn(log.isbn || "");
-      setStatus(log.status);
-      setResonance(log.resonance);
+      setStatus(log.status || "unread");
+      setResonance(log.resonance ?? 0);
       setStartedAt(log.started_at || "");
       setFinishedAt(log.finished_at || "");
       setNotes(log.notes || "");
@@ -72,8 +72,8 @@ export const EditModal: React.FC<EditModalProps> = ({
 
   const handleSearchCandidates = async (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
-    const queryTitle = title.trim();
-    const queryAuthor = author.trim();
+    const queryTitle = (title || "").trim();
+    const queryAuthor = (author || "").trim();
     if (!queryTitle && !queryAuthor) {
       setCandidateFeedback("SPECIFY TITLE OR AUTHOR TO QUERY API");
       setShowCandidates(true);
@@ -101,7 +101,7 @@ export const EditModal: React.FC<EditModalProps> = ({
   };
 
   const handleApplyCandidate = (c: CandidateItem) => {
-    setTitle(c.title);
+    setTitle(c.title || "");
     setAuthor(c.author || "");
     setPublisher(c.publisher || "");
     setIsbn(c.isbn || "");
@@ -130,33 +130,46 @@ export const EditModal: React.FC<EditModalProps> = ({
 
   const parsedTags: string[] = React.useMemo(() => {
     if (!tags) return [];
-    try {
-      const parsed = JSON.parse(tags);
-      if (Array.isArray(parsed)) return parsed.map(String).filter((s) => s.trim().length > 0);
-      if (typeof parsed === "string" && parsed.trim().length > 0) return [parsed.trim()];
-    } catch {
-      return tags.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+    if (Array.isArray(tags)) {
+      return (tags as any[]).map(String).map((s) => s.trim()).filter((s) => s.length > 0);
+    }
+    if (typeof tags === "string") {
+      try {
+        const parsed = JSON.parse(tags);
+        if (Array.isArray(parsed)) {
+          return parsed.map(String).map((s) => s.trim()).filter((s) => s.length > 0);
+        }
+        if (typeof parsed === "string" && parsed.trim().length > 0) {
+          return [parsed.trim()];
+        }
+      } catch {
+        return tags
+          .split(",")
+          .map((t) => t.trim())
+          .filter((t) => t.length > 0);
+      }
     }
     return [];
   }, [tags]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || isSaving) return;
+    const safeTitle = (title || "").trim();
+    if (!safeTitle || isSaving) return;
 
     setIsSaving(true);
     try {
       await onSave({
         id: log.id,
-        title: title.trim(),
-        author: author.trim() || null,
-        publisher: publisher.trim() || null,
-        isbn: isbn.trim() || null,
+        title: safeTitle,
+        author: (author || "").trim() || null,
+        publisher: (publisher || "").trim() || null,
+        isbn: (isbn || "").trim() || null,
         status,
         resonance,
-        started_at: startedAt.trim() || null,
-        finished_at: finishedAt.trim() || null,
-        notes: notes.trim() || null,
+        started_at: (startedAt || "").trim() || null,
+        finished_at: (finishedAt || "").trim() || null,
+        notes: (notes || "").trim() || null,
         tags: tags || null,
       });
       onClose();
@@ -185,7 +198,7 @@ export const EditModal: React.FC<EditModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 select-none animate-in fade-in duration-100"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 select-none animate-in fade-in duration-100"
       onClick={onClose}
     >
       <div
@@ -196,7 +209,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         <div className="flex items-center justify-between border-b border-cyan-900/60 pb-3 mb-4 shrink-0">
           <div className="flex items-center space-x-2">
             <span className="font-mono text-[#00e5ff] font-bold text-sm tracking-wider">
-              EDIT_RECORD://{log.id.slice(0, 8)}
+              EDIT_RECORD://{String(log.id || "").slice(0, 8)}
             </span>
             <span className="font-mono text-cyan-700 text-xs">[SCHEMA_V2.1 + CONTEXT]</span>
           </div>
@@ -220,7 +233,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               <button
                 type="button"
                 onClick={handleSearchCandidates}
-                disabled={isSearchingCandidates || (!title.trim() && !author.trim())}
+                disabled={isSearchingCandidates || (!(title || "").trim() && !(author || "").trim())}
                 className="font-mono text-[10px] px-2.5 py-0.5 border border-cyan-700/70 bg-cyan-950/40 text-cyan-300 hover:border-[#00e5ff] hover:text-[#00e5ff] hover:bg-cyan-900/40 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {isSearchingCandidates ? "[ 🔍 SEARCHING API... ]" : "[ 🔍 QUERY CANDIDATES ]"}
@@ -229,7 +242,7 @@ export const EditModal: React.FC<EditModalProps> = ({
             <input
               type="text"
               required
-              value={title}
+              value={title || ""}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full border border-cyan-900/80 bg-[#061224] px-3 py-2 font-sans text-sm text-[#e0f7fa] placeholder-cyan-800 focus:border-[#00e5ff] focus:ring-1 focus:ring-[#00e5ff]/30 focus:outline-none"
             />
@@ -328,7 +341,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               </label>
               <input
                 type="text"
-                value={author}
+                value={author || ""}
                 onChange={(e) => setAuthor(e.target.value)}
                 placeholder="---"
                 className="w-full border border-cyan-900/80 bg-[#061224] px-3 py-2 font-sans text-xs text-slate-200 placeholder-cyan-800 focus:border-[#00e5ff] focus:outline-none"
@@ -340,7 +353,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               </label>
               <input
                 type="text"
-                value={publisher}
+                value={publisher || ""}
                 onChange={(e) => setPublisher(e.target.value)}
                 placeholder="---"
                 className="w-full border border-cyan-900/80 bg-[#061224] px-3 py-2 font-sans text-xs text-slate-200 placeholder-cyan-800 focus:border-[#00e5ff] focus:outline-none"
@@ -355,12 +368,12 @@ export const EditModal: React.FC<EditModalProps> = ({
                 // PERSONAL CONTEXT / READING NOTES
               </label>
               <span className="font-mono text-[10px] text-cyan-600">
-                [ {notes.length} CHARS ]
+                [ {(notes || "").length} CHARS ]
               </span>
             </div>
             <textarea
               rows={4}
-              value={notes}
+              value={notes || ""}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="// ENTER YOUR THOUGHTS, CONCEPTS, OR RESONANCE..."
               className="w-full border border-cyan-900/70 bg-[#020612] p-3 font-sans text-xs text-[#e0f7fa] placeholder-cyan-900 leading-relaxed focus:border-[#00e5ff] focus:ring-1 focus:ring-[#00e5ff]/20 focus:outline-none resize-y no-scrollbar"
@@ -399,7 +412,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               </label>
               <input
                 type="text"
-                value={isbn}
+                value={isbn || ""}
                 onChange={(e) => setIsbn(e.target.value)}
                 placeholder="---"
                 className="w-full border border-cyan-900/80 bg-[#061224] px-3 py-2 font-mono text-xs text-cyan-200 placeholder-cyan-800 focus:border-[#00e5ff] focus:outline-none"
@@ -504,7 +517,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
               <input
                 type="date"
-                value={startedAt}
+                value={startedAt || ""}
                 onChange={(e) => setStartedAt(e.target.value)}
                 className="w-full border border-cyan-900/80 bg-[#061224] px-3 py-1.5 font-mono text-xs text-cyan-200 focus:border-[#00e5ff] focus:outline-none"
               />
@@ -536,7 +549,7 @@ export const EditModal: React.FC<EditModalProps> = ({
               </div>
               <input
                 type="date"
-                value={finishedAt}
+                value={finishedAt || ""}
                 onChange={(e) => setFinishedAt(e.target.value)}
                 className="w-full border border-cyan-900/80 bg-[#061224] px-3 py-1.5 font-mono text-xs text-cyan-200 focus:border-[#00e5ff] focus:outline-none"
               />

@@ -292,6 +292,7 @@ export const App: React.FC = () => {
 
       {/* 4. Cyberpunk Edit Modal */}
       <EditModal
+        key={editingLog ? editingLog.id : "closed"}
         log={editingLog}
         isOpen={editingLog !== null}
         onClose={() => setEditingLog(null)}

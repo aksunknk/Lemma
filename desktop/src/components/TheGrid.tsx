@@ -85,12 +85,12 @@ export const TheGrid: React.FC<TheGridProps> = ({
     if (q) {
       result = result.filter((l) => {
         return (
-          l.title.toLowerCase().includes(q) ||
+          (l.title && l.title.toLowerCase().includes(q)) ||
           (l.author && l.author.toLowerCase().includes(q)) ||
           (l.publisher && l.publisher.toLowerCase().includes(q)) ||
           (l.isbn && l.isbn.toLowerCase().includes(q)) ||
-          (l.notes && l.notes.toLowerCase().includes(q)) ||
-          (l.tags && l.tags.toLowerCase().includes(q))
+          (l.notes && String(l.notes).toLowerCase().includes(q)) ||
+          (l.tags && String(l.tags).toLowerCase().includes(q))
         );
       });
     }
@@ -415,12 +415,17 @@ export const TheGrid: React.FC<TheGridProps> = ({
           const hasNotes = Boolean(log.notes && log.notes.trim().length > 0);
           const parsedTags: string[] = (() => {
             if (!log.tags) return [];
-            try {
-              const parsed = JSON.parse(log.tags);
-              if (Array.isArray(parsed)) return parsed.map(String).filter((s) => s.trim().length > 0);
-              if (typeof parsed === "string" && parsed.trim().length > 0) return [parsed.trim()];
-            } catch {
-              return log.tags.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+            if (Array.isArray(log.tags)) {
+              return (log.tags as any[]).map(String).map((s) => s.trim()).filter((s) => s.length > 0);
+            }
+            if (typeof log.tags === "string") {
+              try {
+                const parsed = JSON.parse(log.tags);
+                if (Array.isArray(parsed)) return parsed.map(String).map((s) => s.trim()).filter((s) => s.length > 0);
+                if (typeof parsed === "string" && parsed.trim().length > 0) return [parsed.trim()];
+              } catch {
+                return log.tags.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+              }
             }
             return [];
           })();
