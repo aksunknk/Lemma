@@ -18,6 +18,7 @@ pub struct ReadingLog {
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
     pub notes: Option<String>,
+    pub tags: Option<String>,
     pub updated_at: String,
 }
 
@@ -33,6 +34,7 @@ pub struct NewReadingLog {
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
     pub notes: Option<String>,
+    pub tags: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -47,6 +49,7 @@ pub struct UpdateReadingLogPayload {
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
     pub notes: Option<String>,
+    pub tags: Option<String>,
 }
 
 pub struct DbState {
@@ -80,6 +83,7 @@ pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
             started_at TEXT,
             finished_at TEXT,
             notes TEXT,
+            tags TEXT,
             updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_reading_logs_updated_at ON reading_logs(updated_at DESC);
@@ -91,13 +95,14 @@ pub fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     let _ = conn.execute("ALTER TABLE reading_logs ADD COLUMN started_at TEXT", []);
     let _ = conn.execute("ALTER TABLE reading_logs ADD COLUMN finished_at TEXT", []);
     let _ = conn.execute("ALTER TABLE reading_logs ADD COLUMN notes TEXT", []);
+    let _ = conn.execute("ALTER TABLE reading_logs ADD COLUMN tags TEXT", []);
 
     Ok(())
 }
 
 pub fn get_all_logs(conn: &Connection) -> Result<Vec<ReadingLog>, rusqlite::Error> {
     let mut stmt = conn.prepare(
-        "SELECT id, isbn, title, author, publisher, status, resonance, started_at, finished_at, notes, updated_at 
+        "SELECT id, isbn, title, author, publisher, status, resonance, started_at, finished_at, notes, tags, updated_at 
          FROM reading_logs 
          ORDER BY updated_at DESC",
     )?;
@@ -114,7 +119,8 @@ pub fn get_all_logs(conn: &Connection) -> Result<Vec<ReadingLog>, rusqlite::Erro
             started_at: row.get(7)?,
             finished_at: row.get(8)?,
             notes: row.get(9)?,
-            updated_at: row.get(10)?,
+            tags: row.get(10)?,
+            updated_at: row.get(11)?,
         })
     })?;
 
@@ -147,10 +153,11 @@ pub fn insert_log(conn: &Connection, new_log: NewReadingLog) -> Result<ReadingLo
     };
 
     let notes = new_log.notes.filter(|n| !n.trim().is_empty());
+    let tags = new_log.tags.filter(|t| !t.trim().is_empty());
 
     conn.execute(
-        "INSERT INTO reading_logs (id, isbn, title, author, publisher, status, resonance, started_at, finished_at, notes, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        "INSERT INTO reading_logs (id, isbn, title, author, publisher, status, resonance, started_at, finished_at, notes, tags, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
             &id,
             &new_log.isbn,
@@ -162,6 +169,7 @@ pub fn insert_log(conn: &Connection, new_log: NewReadingLog) -> Result<ReadingLo
             &started_at,
             &finished_at,
             &notes,
+            &tags,
             &updated_at
         ],
     )?;
@@ -177,6 +185,7 @@ pub fn insert_log(conn: &Connection, new_log: NewReadingLog) -> Result<ReadingLo
         started_at,
         finished_at,
         notes,
+        tags,
         updated_at,
     })
 }
@@ -193,10 +202,11 @@ pub fn batch_insert_logs(conn: &mut Connection, logs: Vec<NewReadingLog>) -> Res
         let status = log.status.unwrap_or_else(|| "unread".to_string());
         let resonance = log.resonance.unwrap_or(0);
         let notes = log.notes.filter(|n| !n.trim().is_empty());
+        let tags = log.tags.filter(|t| !t.trim().is_empty());
 
         tx.execute(
-            "INSERT OR REPLACE INTO reading_logs (id, isbn, title, author, publisher, status, resonance, started_at, finished_at, notes, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT OR REPLACE INTO reading_logs (id, isbn, title, author, publisher, status, resonance, started_at, finished_at, notes, tags, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 &id,
                 &log.isbn,
@@ -208,6 +218,7 @@ pub fn batch_insert_logs(conn: &mut Connection, logs: Vec<NewReadingLog>) -> Res
                 &log.started_at,
                 &log.finished_at,
                 &notes,
+                &tags,
                 &updated_at
             ],
         )?;
@@ -223,7 +234,7 @@ pub fn update_existing_log(
 ) -> Result<ReadingLog, rusqlite::Error> {
     // 1. Fetch current record
     let mut stmt = conn.prepare(
-        "SELECT id, isbn, title, author, publisher, status, resonance, started_at, finished_at, notes, updated_at
+        "SELECT id, isbn, title, author, publisher, status, resonance, started_at, finished_at, notes, tags, updated_at
          FROM reading_logs WHERE id = ?1",
     )?;
 
@@ -239,7 +250,8 @@ pub fn update_existing_log(
             started_at: row.get(7)?,
             finished_at: row.get(8)?,
             notes: row.get(9)?,
-            updated_at: row.get(10)?,
+            tags: row.get(10)?,
+            updated_at: row.get(11)?,
         })
     })?;
 
@@ -253,6 +265,11 @@ pub fn update_existing_log(
         payload.notes.map(|n| if n.trim().is_empty() { String::new() } else { n }).filter(|n| !n.is_empty())
     } else {
         current.notes
+    };
+    let new_tags = if payload.tags.is_some() {
+        payload.tags.map(|t| if t.trim().is_empty() { String::new() } else { t }).filter(|t| !t.is_empty())
+    } else {
+        current.tags
     };
 
     let today = Local::now().format("%Y-%m-%d").to_string();
@@ -279,8 +296,8 @@ pub fn update_existing_log(
 
     conn.execute(
         "UPDATE reading_logs 
-         SET title = ?1, author = ?2, publisher = ?3, isbn = ?4, status = ?5, resonance = ?6, started_at = ?7, finished_at = ?8, notes = ?9, updated_at = ?10
-         WHERE id = ?11",
+         SET title = ?1, author = ?2, publisher = ?3, isbn = ?4, status = ?5, resonance = ?6, started_at = ?7, finished_at = ?8, notes = ?9, tags = ?10, updated_at = ?11
+         WHERE id = ?12",
         params![
             &new_title,
             &new_author,
@@ -291,6 +308,7 @@ pub fn update_existing_log(
             &new_started_at,
             &new_finished_at,
             &new_notes,
+            &new_tags,
             &updated_at,
             &payload.id
         ],
@@ -307,6 +325,7 @@ pub fn update_existing_log(
         started_at: new_started_at,
         finished_at: new_finished_at,
         notes: new_notes,
+        tags: new_tags,
         updated_at,
     })
 }
@@ -318,7 +337,7 @@ pub fn delete_existing_log(conn: &Connection, id: &str) -> Result<(), rusqlite::
 
 pub fn get_resonance_logs(conn: &Connection) -> Result<Vec<ReadingLog>, rusqlite::Error> {
     let mut stmt = conn.prepare(
-        "SELECT id, isbn, title, author, publisher, status, resonance, started_at, finished_at, notes, updated_at 
+        "SELECT id, isbn, title, author, publisher, status, resonance, started_at, finished_at, notes, tags, updated_at 
          FROM reading_logs 
          WHERE resonance = 1
          ORDER BY updated_at DESC",
@@ -336,7 +355,8 @@ pub fn get_resonance_logs(conn: &Connection) -> Result<Vec<ReadingLog>, rusqlite
             started_at: row.get(7)?,
             finished_at: row.get(8)?,
             notes: row.get(9)?,
-            updated_at: row.get(10)?,
+            tags: row.get(10)?,
+            updated_at: row.get(11)?,
         })
     })?;
 
@@ -352,11 +372,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_sqlite_crud_and_auto_timestamps_and_notes() {
+    fn test_sqlite_crud_and_auto_timestamps_and_notes_and_tags() {
         let mut conn = Connection::open_in_memory().unwrap();
         init_schema(&conn).unwrap();
 
-        // 1. Insert unread log with personal notes
+        // 1. Insert unread log with personal notes and latent concept tags
         let log1 = insert_log(
             &conn,
             NewReadingLog {
@@ -370,6 +390,7 @@ mod tests {
                 started_at: None,
                 finished_at: None,
                 notes: Some("「恥の多い生涯を送って来ました。」冒頭のインパクトが凄まじい。".into()),
+                tags: Some("[\"自己否定\", \"疎外感\", \"無頼派\"]".into()),
             },
         )
         .unwrap();
@@ -381,8 +402,12 @@ mod tests {
             log1.notes.as_deref(),
             Some("「恥の多い生涯を送って来ました。」冒頭のインパクトが凄まじい。")
         );
+        assert_eq!(
+            log1.tags.as_deref(),
+            Some("[\"自己否定\", \"疎外感\", \"無頼派\"]")
+        );
 
-        // 2. Cycle to reading -> auto-sets started_at, retains notes
+        // 2. Cycle to reading -> auto-sets started_at, retains notes and tags
         let updated1 = update_existing_log(
             &conn,
             UpdateReadingLogPayload {
@@ -396,6 +421,7 @@ mod tests {
                 started_at: None,
                 finished_at: None,
                 notes: None,
+                tags: None,
             },
         )
         .unwrap();
@@ -407,8 +433,12 @@ mod tests {
             updated1.notes.as_deref(),
             Some("「恥の多い生涯を送って来ました。」冒頭のインパクトが凄まじい。")
         );
+        assert_eq!(
+            updated1.tags.as_deref(),
+            Some("[\"自己否定\", \"疎外感\", \"無頼派\"]")
+        );
 
-        // 3. Update notes
+        // 3. Update notes and tags
         let updated2 = update_existing_log(
             &conn,
             UpdateReadingLogPayload {
@@ -422,6 +452,7 @@ mod tests {
                 started_at: None,
                 finished_at: None,
                 notes: Some("読了。人間の弱さと救済についての深い思索。".into()),
+                tags: Some("[\"道化\", \"破滅の美学\"]".into()),
             },
         )
         .unwrap();
@@ -433,8 +464,12 @@ mod tests {
             updated2.notes.as_deref(),
             Some("読了。人間の弱さと救済についての深い思索。")
         );
+        assert_eq!(
+            updated2.tags.as_deref(),
+            Some("[\"道化\", \"破滅の美学\"]")
+        );
 
-        // 4. Batch insert for CSV import with notes
+        // 4. Batch insert for CSV import with notes and tags
         let batch = vec![
             NewReadingLog {
                 id: Some("custom-id-1".into()),
@@ -447,6 +482,7 @@ mod tests {
                 started_at: Some("2026-08-01".into()),
                 finished_at: None,
                 notes: Some("先生と遺書の手紙の心理描写。".into()),
+                tags: Some("[\"エゴイズム\", \"罪悪感\", \"明治の精神\"]".into()),
             },
         ];
         let imported = batch_insert_logs(&mut conn, batch).unwrap();
@@ -460,5 +496,6 @@ mod tests {
         assert_eq!(res_items.len(), 1);
         assert_eq!(res_items[0].title, "こころ");
         assert_eq!(res_items[0].notes.as_deref(), Some("先生と遺書の手紙の心理描写。"));
+        assert_eq!(res_items[0].tags.as_deref(), Some("[\"エゴイズム\", \"罪悪感\", \"明治の精神\"]"));
     }
 }

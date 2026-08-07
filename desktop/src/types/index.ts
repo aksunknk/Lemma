@@ -11,6 +11,7 @@ export interface ReadingLog {
   started_at: string | null;
   finished_at: string | null;
   notes: string | null;
+  tags: string | null;
   updated_at: string;
 }
 
@@ -25,6 +26,7 @@ export interface NewReadingLog {
   started_at?: string | null;
   finished_at?: string | null;
   notes?: string | null;
+  tags?: string | null;
 }
 
 export interface UpdateLogPayload {
@@ -38,6 +40,7 @@ export interface UpdateLogPayload {
   started_at?: string | null;
   finished_at?: string | null;
   notes?: string | null;
+  tags?: string | null;
 }
 
 export interface CandidateItem {
@@ -49,6 +52,7 @@ export interface CandidateItem {
   source: "google_books" | "lemma_centroid";
   distance?: number;
   notes?: string | null;
+  tags?: string | null;
 }
 
 export interface CentroidRequestItem {

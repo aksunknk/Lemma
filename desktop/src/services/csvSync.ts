@@ -98,6 +98,7 @@ export async function exportLogsToCsv(logs: ReadingLog[]): Promise<string | null
     "started_at",
     "finished_at",
     "notes",
+    "tags",
     "updated_at",
   ];
 
@@ -112,6 +113,7 @@ export async function exportLogsToCsv(logs: ReadingLog[]): Promise<string | null
     escapeCsvField(log.started_at),
     escapeCsvField(log.finished_at),
     escapeCsvField(log.notes),
+    escapeCsvField(log.tags),
     escapeCsvField(log.updated_at),
   ]);
 
@@ -163,6 +165,7 @@ export async function importLogsFromCsv(): Promise<{ count: number; path: string
         started_at: rec.started_at?.trim() || null,
         finished_at: rec.finished_at?.trim() || null,
         notes: rec.notes?.trim() || null,
+        tags: rec.tags?.trim() || null,
       };
     });
 

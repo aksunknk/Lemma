@@ -26,6 +26,7 @@ export const EditModal: React.FC<EditModalProps> = ({
   const [startedAt, setStartedAt] = useState("");
   const [finishedAt, setFinishedAt] = useState("");
   const [notes, setNotes] = useState("");
+  const [tags, setTags] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
@@ -47,6 +48,7 @@ export const EditModal: React.FC<EditModalProps> = ({
       setStartedAt(log.started_at || "");
       setFinishedAt(log.finished_at || "");
       setNotes(log.notes || "");
+      setTags(log.tags || null);
       setIsConfirmingDelete(false);
       setCandidates([]);
       setCandidateFeedback(null);
@@ -126,6 +128,18 @@ export const EditModal: React.FC<EditModalProps> = ({
     }
   };
 
+  const parsedTags: string[] = React.useMemo(() => {
+    if (!tags) return [];
+    try {
+      const parsed = JSON.parse(tags);
+      if (Array.isArray(parsed)) return parsed.map(String).filter((s) => s.trim().length > 0);
+      if (typeof parsed === "string" && parsed.trim().length > 0) return [parsed.trim()];
+    } catch {
+      return tags.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+    }
+    return [];
+  }, [tags]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || isSaving) return;
@@ -143,6 +157,7 @@ export const EditModal: React.FC<EditModalProps> = ({
         started_at: startedAt.trim() || null,
         finished_at: finishedAt.trim() || null,
         notes: notes.trim() || null,
+        tags: tags || null,
       });
       onClose();
     } catch (err) {
@@ -347,10 +362,34 @@ export const EditModal: React.FC<EditModalProps> = ({
               rows={4}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Why did you resonate with this book? Record striking quotes, key insights, thesis reflections, page markers..."
-              className="w-full border border-cyan-900/80 bg-[#061224] p-3 font-sans text-xs text-[#e0f7fa] placeholder-cyan-900 leading-relaxed focus:border-[#00e5ff] focus:ring-1 focus:ring-[#00e5ff]/30 focus:outline-none resize-y"
+              placeholder="// ENTER YOUR THOUGHTS, CONCEPTS, OR RESONANCE..."
+              className="w-full border border-cyan-900/70 bg-[#020612] p-3 font-sans text-xs text-[#e0f7fa] placeholder-cyan-900 leading-relaxed focus:border-[#00e5ff] focus:ring-1 focus:ring-[#00e5ff]/20 focus:outline-none resize-y no-scrollbar"
             />
           </div>
+
+          {/* Latent Concepts / Extracted Tags Display */}
+          {parsedTags.length > 0 && (
+            <div className="border border-cyan-950/80 bg-[#020713] p-2.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block font-mono text-[10px] font-bold text-cyan-500 uppercase tracking-wider">
+                  // EXTRACTED TOPICS & LATENT CONCEPTS
+                </label>
+                <span className="font-mono text-[9px] text-cyan-700">
+                  [ {parsedTags.length} CONCEPTS ]
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 font-mono text-[11px]">
+                {parsedTags.map((tag, idx) => (
+                  <span
+                    key={idx}
+                    className="border border-cyan-900/60 bg-transparent text-cyan-400 px-2 py-0.5"
+                  >
+                    [ {tag} ]
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ISBN & Resonance Status */}
           <div className="grid grid-cols-2 gap-3 items-center">

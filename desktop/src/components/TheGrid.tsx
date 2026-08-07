@@ -80,7 +80,7 @@ export const TheGrid: React.FC<TheGridProps> = ({
       result = result.filter((l) => l.resonance === 1);
     }
 
-    // 2. Search Query Filter (Title, Author, Publisher, ISBN, Notes)
+    // 2. Search Query Filter (Title, Author, Publisher, ISBN, Notes, Tags)
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       result = result.filter((l) => {
@@ -89,7 +89,8 @@ export const TheGrid: React.FC<TheGridProps> = ({
           (l.author && l.author.toLowerCase().includes(q)) ||
           (l.publisher && l.publisher.toLowerCase().includes(q)) ||
           (l.isbn && l.isbn.toLowerCase().includes(q)) ||
-          (l.notes && l.notes.toLowerCase().includes(q))
+          (l.notes && l.notes.toLowerCase().includes(q)) ||
+          (l.tags && l.tags.toLowerCase().includes(q))
         );
       });
     }
@@ -412,6 +413,17 @@ export const TheGrid: React.FC<TheGridProps> = ({
           const isResonating = log.resonance === 1;
           const hasDates = log.started_at || log.finished_at;
           const hasNotes = Boolean(log.notes && log.notes.trim().length > 0);
+          const parsedTags: string[] = (() => {
+            if (!log.tags) return [];
+            try {
+              const parsed = JSON.parse(log.tags);
+              if (Array.isArray(parsed)) return parsed.map(String).filter((s) => s.trim().length > 0);
+              if (typeof parsed === "string" && parsed.trim().length > 0) return [parsed.trim()];
+            } catch {
+              return log.tags.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+            }
+            return [];
+          })();
 
           return (
             <div
@@ -443,19 +455,35 @@ export const TheGrid: React.FC<TheGridProps> = ({
                 {getStatusBadge(log.status)}
               </div>
 
-              {/* Title & Notes Indicator */}
-              <div className="col-span-4 flex items-center space-x-2 truncate">
-                <span className="font-sans font-medium text-[13px] text-[#e0f7fa] tracking-normal leading-snug truncate group-hover:text-[#00e5ff] transition-colors">
-                  {log.title}
-                </span>
-
-                {/* Personal Notes Indicator */}
-                {hasNotes && (
-                  <span
-                    className="font-mono text-[9px] border border-cyan-500/50 bg-cyan-950/50 text-[#00e5ff] px-1.5 py-0.2 shrink-0 tracking-tighter"
-                  >
-                    [NOTE]
+              {/* Title, Notes Indicator & Latent Tags */}
+              <div className="col-span-4 flex flex-col justify-center min-w-0 pr-2">
+                <div className="flex items-center space-x-2 truncate">
+                  <span className="font-sans font-medium text-[13px] text-[#e0f7fa] tracking-normal leading-snug truncate group-hover:text-[#00e5ff] transition-colors">
+                    {log.title}
                   </span>
+
+                  {/* Personal Notes Indicator */}
+                  {hasNotes && (
+                    <span
+                      className="font-mono text-[9px] border border-cyan-500/50 bg-cyan-950/50 text-[#00e5ff] px-1.5 py-0.2 shrink-0 tracking-tighter"
+                    >
+                      [NOTE]
+                    </span>
+                  )}
+                </div>
+
+                {/* Extracted Latent Concept Tags */}
+                {parsedTags.length > 0 && (
+                  <div className="flex items-center space-x-1.5 mt-0.5 overflow-x-hidden truncate">
+                    {parsedTags.map((tag, idx) => (
+                      <span
+                        key={idx}
+                        className="font-mono text-[10px] text-cyan-500/80 tracking-tight whitespace-nowrap"
+                      >
+                        [ {tag} ]
+                      </span>
+                    ))}
+                  </div>
                 )}
               </div>
 

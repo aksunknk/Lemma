@@ -2,11 +2,15 @@
 Lemma API — Stateless Hybrid Vector Search Engine
 """
 import datetime
+import json
 import logging
+import os
+import re
+from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import httpx
 from pydantic import BaseModel
-from typing import Optional
 import uvicorn
 from vector_search import LemmaSearchEngine
 from nlp_processor import QueryVectorizer
@@ -24,6 +28,15 @@ FUTURE_MAGAZINES = {
     5: "週刊現代",
     6: "週刊ポスト",
 }
+
+LM_STUDIO_URL = os.getenv("LM_STUDIO_URL", "http://localhost:1234/v1/chat/completions")
+
+SYSTEM_PROMPT_MIMI_LEMMA = """
+あなたは高度な概念抽出エンジンです。ユーザーの読書メモから、その根底にある抽象的な「概念（Concept）」「テーマ（Theme）」「哲学（Philosophy）」を3〜5個抽出してください。
+一般的なジャンル名（例: 小説、ビジネス書）は排除し、より深くメタ的なキーワード（例: 時間の非線形性、自己組織化、実存主義）を生成してください。
+出力は以下の厳密なJSON形式のみとし、他のテキストは一切含めないでください。
+{ "tags": ["概念A", "概念B", "概念C"] }
+"""
 
 ALLOWED_ORIGINS = [
     "*",
@@ -57,6 +70,12 @@ class CentroidPayload(BaseModel):
     items: Optional[list[CentroidItem]] = None
     titles: Optional[list[str]] = None
 
+class ExtractConceptsRequest(BaseModel):
+    note: str
+
+class ExtractConceptsResponse(BaseModel):
+    tags: list[str]
+
 class SearchResult(BaseModel):
     status: int
     item_id: str
@@ -66,6 +85,72 @@ class SearchResult(BaseModel):
     category: str
     distance: float
     vector: list[float]
+
+
+def _parse_llm_json(raw_text: str) -> list[str]:
+    raw_text = raw_text.strip()
+    # 1. Remove markdown code fence if present
+    if "```" in raw_text:
+        match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_text)
+        if match:
+            raw_text = match.group(1).strip()
+    
+    # 2. Direct JSON parsing
+    try:
+        data = json.loads(raw_text)
+        if isinstance(data, dict) and "tags" in data and isinstance(data["tags"], list):
+            return [str(t).strip() for t in data["tags"] if str(t).strip()]
+        if isinstance(data, list):
+            return [str(t).strip() for t in data if str(t).strip()]
+    except Exception:
+        # 3. Fallback: match outermost { ... }
+        match = re.search(r"\{[\s\S]*\}", raw_text)
+        if match:
+            try:
+                data = json.loads(match.group(0))
+                if isinstance(data, dict) and "tags" in data and isinstance(data["tags"], list):
+                    return [str(t).strip() for t in data["tags"] if str(t).strip()]
+            except Exception:
+                pass
+    return []
+
+
+async def extract_tags_via_llm(note: str) -> list[str]:
+    if not note or not note.strip():
+        return []
+
+    payload = {
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT_MIMI_LEMMA.strip()},
+            {"role": "user", "content": note.strip()},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 100,
+    }
+
+    try:
+        timeout = httpx.Timeout(60.0, connect=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                LM_STUDIO_URL,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            if response.status_code != 200:
+                logger.warning("LM Studio returned non-200 status: %s", response.status_code)
+                return []
+
+            res_data = response.json()
+            choices = res_data.get("choices", [])
+            if not choices:
+                return []
+
+            content = choices[0].get("message", {}).get("content", "")
+            return _parse_llm_json(content)
+    except Exception as e:
+        logger.warning("LM Studio tag extraction failed or unreachable: %s", e)
+        return []
+
 
 @app.post("/api/search")
 async def search_book(req: SearchPayload):
@@ -146,6 +231,11 @@ async def extract_centroid(req: CentroidPayload):
     except Exception as e:
         logger.exception("Unexpected error during extract_centroid")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/extract_concepts", response_model=ExtractConceptsResponse)
+async def extract_concepts(req: ExtractConceptsRequest):
+    tags = await extract_tags_via_llm(req.note)
+    return ExtractConceptsResponse(tags=tags)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

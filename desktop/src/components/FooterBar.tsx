@@ -86,6 +86,13 @@ export const FooterBar: React.FC<FooterBarProps> = ({
     }
   };
 
+  const totalCount = logs.length;
+  const unreadCount = logs.filter((l) => l.status === "unread").length;
+  const unreadRatio = totalCount > 0 ? unreadCount / totalCount : 0;
+  const barLength = 8;
+  const filledChars = Math.round(unreadRatio * barLength);
+  const asciiBar = "|".repeat(filledChars) + ".".repeat(barLength - filledChars);
+
   return (
     <footer className="border-t border-cyan-900/40 bg-[#020408] px-4 py-2.5 font-mono text-xs text-[#00e5ff] select-none flex items-center justify-between">
       {/* Left: Resonance Pool Visualizer */}
@@ -110,7 +117,6 @@ export const FooterBar: React.FC<FooterBarProps> = ({
               <span
                 key={l.id}
                 className="font-sans border border-cyan-800/40 bg-cyan-950/30 text-cyan-200 px-2 py-0.5 whitespace-nowrap truncate max-w-[180px]"
-                title={`${l.title} (${l.author || "Unknown"})`}
               >
                 {l.title}
               </span>
@@ -123,48 +129,58 @@ export const FooterBar: React.FC<FooterBarProps> = ({
         </div>
       </div>
 
-      {/* Right: CSV Sync & Centroid Inference Actions */}
-      <div className="flex items-center space-x-2.5 whitespace-nowrap">
-        {/* CSV Sync Button Group */}
-        <button
-          type="button"
-          disabled={isSyncing}
-          onClick={handleImport}
-          className="border border-cyan-900/80 bg-[#040c18] px-2.5 py-1.5 text-[11px] font-semibold text-cyan-400 hover:border-[#00e5ff] hover:text-[#00e5ff] hover:bg-[#00e5ff]/10 transition-colors cursor-pointer"
-          title="Import logs from a CSV file"
-        >
-          [CSV IMPORT]
-        </button>
+      {/* Center/Right Actions & Anti-Library Mass Gauge */}
+      <div className="flex items-center space-x-3 shrink-0">
+        {/* Anti-Library Mass Indicator (Knowledge Potential Gauge) */}
+        <div className="hidden md:flex items-center space-x-2 text-[11px] font-mono border border-cyan-950/80 bg-[#030914] px-2.5 py-1 text-cyan-600/90 select-none">
+          <span className="text-cyan-700 font-semibold tracking-wider">ANTI-LIBRARY MASS:</span>
+          <span className="text-cyan-400 font-bold">{unreadCount}</span>
+          <span className="text-cyan-800">/</span>
+          <span className="text-cyan-600">{totalCount}</span>
+          <span className="text-cyan-700/80 font-mono tracking-wider">[{asciiBar}]</span>
+        </div>
 
-        <button
-          type="button"
-          disabled={isSyncing || logs.length === 0}
-          onClick={handleExport}
-          className="border border-cyan-900/80 bg-[#040c18] px-2.5 py-1.5 text-[11px] font-semibold text-cyan-400 hover:border-[#00e5ff] hover:text-[#00e5ff] hover:bg-[#00e5ff]/10 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Export all logs to a CSV file"
-        >
-          [CSV EXPORT]
-        </button>
+        {/* CSV Sync & Centroid Inference Actions */}
+        <div className="flex items-center space-x-2.5 whitespace-nowrap">
+          {/* CSV Sync Button Group */}
+          <button
+            type="button"
+            disabled={isSyncing}
+            onClick={handleImport}
+            className="border border-cyan-900/80 bg-[#040c18] px-2.5 py-1.5 text-[11px] font-semibold text-cyan-400 hover:border-[#00e5ff] hover:text-[#00e5ff] hover:bg-[#00e5ff]/10 transition-colors cursor-pointer"
+          >
+            [CSV IMPORT]
+          </button>
 
-        <span className="text-cyan-900 select-none">|</span>
+          <button
+            type="button"
+            disabled={isSyncing || logs.length === 0}
+            onClick={handleExport}
+            className="border border-cyan-900/80 bg-[#040c18] px-2.5 py-1.5 text-[11px] font-semibold text-cyan-400 hover:border-[#00e5ff] hover:text-[#00e5ff] hover:bg-[#00e5ff]/10 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            [CSV EXPORT]
+          </button>
 
-        {/* Centroid Inference Trigger */}
-        <button
-          type="button"
-          disabled={resonanceCount === 0 || isExtracting}
-          onClick={handleExtractCentroid}
-          className={`border px-3.5 py-1.5 text-xs font-bold tracking-wider uppercase transition-colors ${
-            resonanceCount > 0 && !isExtracting
-              ? "border-[#00e5ff] bg-[#00e5ff] text-[#020408] hover:bg-transparent hover:text-[#00e5ff] cursor-pointer"
-              : "border-cyan-950 bg-transparent text-cyan-800 cursor-not-allowed"
-          }`}
-        >
-          {isExtracting
-            ? "[ EXTRACTING... ]"
-            : resonanceCount > 0
-            ? "[ EXTRACT CENTROID ]"
-            : "[ POOL EMPTY ]"}
-        </button>
+          <span className="text-cyan-900 select-none">|</span>
+
+          {/* Centroid Inference Trigger */}
+          <button
+            type="button"
+            disabled={resonanceCount === 0 || isExtracting}
+            onClick={handleExtractCentroid}
+            className={`border px-3.5 py-1.5 text-xs font-bold tracking-wider uppercase transition-colors ${
+              resonanceCount > 0 && !isExtracting
+                ? "border-[#00e5ff] bg-[#00e5ff] text-[#020408] hover:bg-transparent hover:text-[#00e5ff] cursor-pointer"
+                : "border-cyan-950 bg-transparent text-cyan-800 cursor-not-allowed"
+            }`}
+          >
+            {isExtracting
+              ? "[ EXTRACTING... ]"
+              : resonanceCount > 0
+              ? "[ EXTRACT CENTROID ]"
+              : "[ POOL EMPTY ]"}
+          </button>
+        </div>
       </div>
     </footer>
   );
