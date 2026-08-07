@@ -16,6 +16,8 @@ interface TheGridProps {
   onEditLog: (log: ReadingLog) => void;
   onAutoFill: () => void;
   autoFillProgress: { done: number; total: number } | null;
+  onExtractConcepts: () => void;
+  conceptExtractionProgress: { done: number; total: number } | null;
 }
 
 export const TheGrid: React.FC<TheGridProps> = ({
@@ -29,6 +31,8 @@ export const TheGrid: React.FC<TheGridProps> = ({
   onEditLog,
   onAutoFill,
   autoFillProgress,
+  onExtractConcepts,
+  conceptExtractionProgress,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
@@ -273,8 +277,24 @@ export const TheGrid: React.FC<TheGridProps> = ({
           </button>
         </div>
 
-        {/* Right: Auto-Fill + Quick Search Input */}
+        {/* Right: Extract Concepts + Auto-Fill + Quick Search Input */}
         <div className="flex items-center space-x-2 shrink-0">
+          {/* EXTRACT CONCEPTS trigger */}
+          <button
+            type="button"
+            onClick={onExtractConcepts}
+            disabled={conceptExtractionProgress !== null}
+            className={`font-mono text-[10px] px-2.5 py-1 border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+              conceptExtractionProgress !== null
+                ? "border-[#00e5ff] bg-cyan-950/50 text-[#00e5ff] tracking-wider animate-pulse shadow-[0_0_10px_rgba(0,229,255,0.2)]"
+                : "border-cyan-900/60 bg-transparent text-cyan-500 hover:border-cyan-400 hover:text-cyan-200"
+            }`}
+          >
+            {conceptExtractionProgress !== null
+              ? `[ EXTRACTING: ${conceptExtractionProgress.done} / ${conceptExtractionProgress.total} ]`
+              : "[ EXTRACT CONCEPTS ]"}
+          </button>
+
           {/* AUTO-FILL trigger */}
           <button
             type="button"

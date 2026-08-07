@@ -12,6 +12,7 @@ import {
 } from "./services/tauriCommands";
 import { exportLogsToCsv, importLogsFromCsv } from "./services/csvSync";
 import { fetchBibliographyForTitle } from "./services/googleBooks";
+import { extractConceptsFromNote } from "./services/lemmaApi";
 import { CandidateItem, LogStatus, ReadingLog, UpdateLogPayload } from "./types";
 
 export const App: React.FC = () => {
@@ -24,6 +25,9 @@ export const App: React.FC = () => {
   // Auto-Fill progress: null = idle, { done, total } = running
   const [autoFillProgress, setAutoFillProgress] = useState<{ done: number; total: number } | null>(null);
   const autoFillRunning = useRef(false);
+  // Concept Extraction progress: null = idle, { done, total } = running
+  const [conceptExtractionProgress, setConceptExtractionProgress] = useState<{ done: number; total: number } | null>(null);
+  const conceptExtractionRunning = useRef(false);
 
   // Load logs on startup
   const fetchAllLogs = async () => {
@@ -257,6 +261,64 @@ export const App: React.FC = () => {
   };
   // ────────────────────────────────────────────────────────────────────────────
 
+  // ── ON-DEMAND BATCH CONCEPT EXTRACTION (SERIAL FETCH) ──────────────────────
+  const runConceptExtraction = async () => {
+    if (conceptExtractionRunning.current) return;
+
+    const isTagsEmpty = (tags: string | null | undefined): boolean => {
+      if (!tags) return true;
+      const trimmed = tags.trim();
+      if (trimmed === "" || trimmed === "[]" || trimmed === "null" || trimmed === "{}") return true;
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed) && parsed.length === 0) return true;
+      } catch {
+        if (trimmed.length > 0) return false;
+      }
+      return false;
+    };
+
+    const targets = logs.filter(
+      (l) => l.notes && l.notes.trim().length > 0 && isTagsEmpty(l.tags)
+    );
+
+    if (targets.length === 0) {
+      setStatusMessage("EXTRACT CONCEPTS: NO TARGET RECORDS (NOTES EMPTY OR ALREADY TAGGED)");
+      return;
+    }
+
+    conceptExtractionRunning.current = true;
+    setConceptExtractionProgress({ done: 0, total: targets.length });
+    setStatusMessage(`CONCEPT EXTRACTION INITIATED [${targets.length} RECORDS TARGETED]`);
+
+    let extracted = 0;
+    let currentIndex = 0;
+    for (const log of targets) {
+      currentIndex++;
+      setConceptExtractionProgress({ done: currentIndex, total: targets.length });
+      try {
+        const extractedTags = await extractConceptsFromNote(log.notes!);
+        if (extractedTags && Array.isArray(extractedTags) && extractedTags.length > 0) {
+          const jsonTags = JSON.stringify(extractedTags);
+          const updated = await updateLog({
+            id: log.id,
+            tags: jsonTags,
+          });
+          setLogs((prev) => prev.map((l) => (l.id === log.id ? updated : l)));
+          extracted++;
+        }
+      } catch (err) {
+        // Silent skip — log to console only
+        console.warn(`[ConceptExtraction] skipped "${log.title}":`, err);
+      }
+    }
+
+    conceptExtractionRunning.current = false;
+    setConceptExtractionProgress(null);
+    setStatusMessage(`CONCEPT EXTRACTION COMPLETE: ${extracted}/${targets.length} RECORDS ENRICHED`);
+  };
+  // ────────────────────────────────────────────────────────────────────────────
+
   return (
     <div className="flex h-screen w-screen flex-col bg-[#020408] text-[#00e5ff] overflow-hidden font-mono antialiased">
       {/* 1. Header & Zero-Routing Command Port */}
@@ -279,6 +341,8 @@ export const App: React.FC = () => {
         onEditLog={(log) => setEditingLog(log)}
         onAutoFill={runAutoFill}
         autoFillProgress={autoFillProgress}
+        onExtractConcepts={runConceptExtraction}
+        conceptExtractionProgress={conceptExtractionProgress}
       />
 
       {/* 3. Footer with Resonance Pool & Centroid Trigger */}

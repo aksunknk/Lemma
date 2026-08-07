@@ -38,3 +38,22 @@ export async function extractCentroid(items: CentroidRequestItem[]): Promise<Can
     distance: item.distance,
   }));
 }
+
+export interface ExtractConceptsResponse {
+  tags: string[];
+}
+
+export async function extractConceptsFromNote(note: string): Promise<string[]> {
+  if (!note || note.trim().length === 0) return [];
+  const apiUrl = import.meta.env.VITE_LEMMA_API_URL || "http://192.168.0.130:8000";
+
+  // Invoke native Rust command to bypass browser WebView CORS limitations completely
+  const tags = await invoke<string[]>("extract_concepts_api", {
+    note,
+    apiUrl,
+  });
+
+  return Array.isArray(tags) ? tags : [];
+}
+
+

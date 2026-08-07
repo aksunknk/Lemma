@@ -30,6 +30,7 @@ FUTURE_MAGAZINES = {
 }
 
 LM_STUDIO_URL = os.getenv("LM_STUDIO_URL", "http://localhost:1234/v1/chat/completions")
+LM_STUDIO_MODEL = os.getenv("LM_STUDIO_MODEL", "")
 
 SYSTEM_PROMPT_MIMI_LEMMA = """
 あなたは高度な概念抽出エンジンです。ユーザーの読書メモから、その根底にある抽象的な「概念（Concept）」「テーマ（Theme）」「哲学（Philosophy）」を3〜5個抽出してください。
@@ -87,57 +88,111 @@ class SearchResult(BaseModel):
     vector: list[float]
 
 
+PLACEHOLDER_TAGS = {"概念a", "概念b", "概念c", "概念1", "概念2", "概念3", "a", "b", "c", "tag1", "tag2", "tag3"}
+
+def _clean_tags(tags: list[str]) -> list[str]:
+    cleaned = []
+    for t in tags:
+        s = str(t).strip()
+        if s and s.lower() not in PLACEHOLDER_TAGS and len(s) > 0:
+            cleaned.append(s)
+    return cleaned
+
 def _parse_llm_json(raw_text: str) -> list[str]:
+    if not raw_text:
+        return []
     raw_text = raw_text.strip()
-    # 1. Remove markdown code fence if present
-    if "```" in raw_text:
-        match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_text)
-        if match:
-            raw_text = match.group(1).strip()
-    
+    # 1. Look for ```json ... ``` blocks first (most reliable)
+    matches = re.findall(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_text)
+    for m in reversed(matches):
+        try:
+            data = json.loads(m.strip())
+            if isinstance(data, dict) and "tags" in data and isinstance(data["tags"], list):
+                res = _clean_tags(data["tags"])
+                if res:
+                    return res
+            if isinstance(data, list):
+                res = _clean_tags(data)
+                if res:
+                    return res
+        except Exception:
+            pass
+
     # 2. Direct JSON parsing
     try:
         data = json.loads(raw_text)
         if isinstance(data, dict) and "tags" in data and isinstance(data["tags"], list):
-            return [str(t).strip() for t in data["tags"] if str(t).strip()]
+            res = _clean_tags(data["tags"])
+            if res:
+                return res
         if isinstance(data, list):
-            return [str(t).strip() for t in data if str(t).strip()]
+            res = _clean_tags(data)
+            if res:
+                return res
     except Exception:
-        # 3. Fallback: match outermost { ... }
-        match = re.search(r"\{[\s\S]*\}", raw_text)
-        if match:
-            try:
-                data = json.loads(match.group(0))
-                if isinstance(data, dict) and "tags" in data and isinstance(data["tags"], list):
-                    return [str(t).strip() for t in data["tags"] if str(t).strip()]
-            except Exception:
-                pass
+        pass
+
+    # 3. Find all { "tags": [...] } patterns in text, picking the last one
+    obj_matches = re.findall(r"\{[^{}]*\"tags\"[^{}]*\}", raw_text)
+    for obj_str in reversed(obj_matches):
+        try:
+            data = json.loads(obj_str)
+            if isinstance(data, dict) and "tags" in data and isinstance(data["tags"], list):
+                res = _clean_tags(data["tags"])
+                if res:
+                    return res
+        except Exception:
+            pass
+
     return []
+
+
+async def _get_lm_studio_model(client: httpx.AsyncClient) -> Optional[str]:
+    if LM_STUDIO_MODEL:
+        return LM_STUDIO_MODEL
+    try:
+        models_url = LM_STUDIO_URL.rsplit("/chat/completions", 1)[0] + "/models"
+        res = await client.get(models_url)
+        if res.status_code == 200:
+            data = res.json()
+            models = [m.get("id") for m in data.get("data", []) if m.get("id")]
+            chat_models = [m for m in models if "embed" not in m.lower()]
+            if chat_models:
+                return chat_models[0]
+            if models:
+                return models[0]
+    except Exception as e:
+        logger.warning("Failed to auto-detect LM Studio model: %s", e)
+    return None
 
 
 async def extract_tags_via_llm(note: str) -> list[str]:
     if not note or not note.strip():
         return []
 
-    payload = {
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT_MIMI_LEMMA.strip()},
-            {"role": "user", "content": note.strip()},
-        ],
-        "temperature": 0.1,
-        "max_tokens": 100,
-    }
-
+    timeout = httpx.Timeout(180.0, connect=15.0)
     try:
-        timeout = httpx.Timeout(60.0, connect=10.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
+            model = await _get_lm_studio_model(client)
+
+            payload = {
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT_MIMI_LEMMA.strip()},
+                    {"role": "user", "content": note.strip()},
+                ],
+                "temperature": 0.1,
+                "max_tokens": 1200,
+            }
+            if model:
+                payload["model"] = model
+
             response = await client.post(
                 LM_STUDIO_URL,
                 json=payload,
                 headers={"Content-Type": "application/json"},
             )
             if response.status_code != 200:
-                logger.warning("LM Studio returned non-200 status: %s", response.status_code)
+                logger.warning("LM Studio returned non-200 status: %s %s", response.status_code, response.text)
                 return []
 
             res_data = response.json()
@@ -145,8 +200,15 @@ async def extract_tags_via_llm(note: str) -> list[str]:
             if not choices:
                 return []
 
-            content = choices[0].get("message", {}).get("content", "")
-            return _parse_llm_json(content)
+            msg = choices[0].get("message", {})
+            content = msg.get("content", "") or ""
+            reasoning = msg.get("reasoning_content", "") or ""
+
+            tags = _parse_llm_json(content)
+            if not tags and reasoning:
+                tags = _parse_llm_json(reasoning)
+
+            return tags
     except Exception as e:
         logger.warning("LM Studio tag extraction failed or unreachable: %s", e)
         return []
